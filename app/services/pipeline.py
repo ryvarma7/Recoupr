@@ -15,7 +15,11 @@ from datetime import datetime, timedelta
 from sqlmodel import Session, select
 
 from app.agents.decision import DecisionProposal, decide
-from app.agents.diagnosis import DiagnosisResult, DiagnosisUnavailable, diagnose, fallback_diagnose
+from app.agents.diagnosis import (
+    DiagnosisUnavailable,
+    diagnose,
+    fallback_diagnose,
+)
 from app.agents.state_machine import audit, transition
 from app.core.clock import as_naive_utc
 from app.core.config import get_settings
@@ -267,8 +271,10 @@ def _execute(session: Session, case: Case, decision: Decision, client: PaymentCl
         ))
         decision.status = DecisionStatus.EXECUTED
         case.messages_sent_count += 1
+        lang = decision.action_params.get("language")
+        tone = decision.action_params.get("tone")
         audit(session, case, actor=Actor.AGENT,
-              summary=f"payment link sent via {channel} ({link['id']}) [{decision.action_params.get('language')}/{decision.action_params.get('tone')}]", now=now)
+              summary=f"payment link sent via {channel} ({link['id']}) [{lang}/{tone}]", now=now)
 
     elif action_type == "retry_mandate_charge":
         result = client.retry_mandate(
@@ -290,8 +296,9 @@ def _execute(session: Session, case: Case, decision: Decision, client: PaymentCl
     # Only real executions consume an attempt and start the cooldown clock.
     case.attempts_count += 1
     case.last_action_at = now
+    max_retries = PolicySnapshot(case.policy_snapshot).max_retries_per_case
     transition(session, case, CaseState.AWAITING_OUTCOME, actor=Actor.AGENT,
-               summary=f"action executed; awaiting outcome (attempt {case.attempts_count}/{PolicySnapshot(case.policy_snapshot).max_retries_per_case})",
+               summary=f"action executed; awaiting outcome (attempt {case.attempts_count}/{max_retries})",
                now=now)
 
 
@@ -409,7 +416,7 @@ def mark_lost(session: Session, case: Case, *, now: datetime) -> None:
     now = as_naive_utc(now)
     session.add(Outcome(case_id=case.id, outcome_type=OutcomeType.LOST))
     transition(session, case, CaseState.LOST, actor=Actor.SYSTEM,
-               summary=f"case TTL elapsed with no recovery", now=now)
+               summary="case TTL elapsed with no recovery", now=now)
     case.terminal_reason = f"TTL of {PolicySnapshot(case.policy_snapshot).case_ttl_days} days elapsed without recovery"
 
 

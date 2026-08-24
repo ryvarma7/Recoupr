@@ -16,14 +16,13 @@ import json
 import logging
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
-from sqlmodel import Session
+from sqlmodel import Session, select
 
-from app.core.config import get_settings
 from app.core.clock import utcnow
+from app.core.config import get_settings
 from app.db.session import get_session
 from app.models.entities import Event, EventType
 from app.services.pipeline import create_case_for_event, process_case, record_recovery
-from sqlmodel import select
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

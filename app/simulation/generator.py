@@ -94,7 +94,7 @@ class SyntheticEventGenerator:
             roll = self._rng.random()
             cumulative = 0.0
             flow = "A"
-            for label, weight in zip(("A", "B", "C"), flow_weights):
+            for label, weight in zip(("A", "B", "C"), flow_weights, strict=False):
                 cumulative += weight
                 if roll <= cumulative:
                     flow = label

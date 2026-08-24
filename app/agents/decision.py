@@ -108,11 +108,9 @@ def _template_candidates(
         )
 
     if diagnosis.confidence < CONFIDENCE_FLOOR or diagnosis.root_cause_category == "unknown":
+        reason = f"low-confidence diagnosis ({diagnosis.root_cause_category}); human review before messaging"
         return (
-            [(
-                "escalate_human",
-                {"reason": f"low-confidence diagnosis ({diagnosis.root_cause_category}); human review before messaging", "queue": "ops-review"},
-            )],
+            [("escalate_human", {"reason": reason, "queue": "ops-review"})],
             "diagnosis below confidence floor",
         )
 
@@ -129,11 +127,13 @@ def _template_candidates(
             return (
                 [
                     ("send_payment_link", {"note": "renew-mandate link"}),
-                    ("escalate_human", {"reason": "mandate revoked; renewal needs customer action", "queue": "ops-review"}),
+                    ("escalate_human",
+                     {"reason": "mandate revoked; renewal needs customer action", "queue": "ops-review"}),
                 ],
                 "mandate revoked — customer must re-authorise",
             )
-        return ([("retry_mandate_charge", {})], f"mandate retry viable after '{diagnosis.root_cause_category}'")
+        viable = f"mandate retry viable after '{diagnosis.root_cause_category}'"
+        return ([("retry_mandate_charge", {})], viable)
 
     channels = _available_channels(case, policy, ctx)
     if not channels:

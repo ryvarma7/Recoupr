@@ -14,7 +14,12 @@ from __future__ import annotations
 import logging
 import secrets
 
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from app.core.config import Settings, get_settings
 
@@ -169,13 +174,13 @@ class PaymentClient:
     def create_payment_link(self, **kwargs) -> dict:
         try:
             return self._impl.create_payment_link(**kwargs)
-        except Exception as exc:  # noqa: BLE001 — external boundary; fail safe upstream
+        except Exception as exc:
             raise ExecutionError(f"payment link creation failed: {exc}") from exc
 
     def retry_mandate(self, **kwargs) -> dict:
         try:
             return self._impl.retry_mandate(**kwargs)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise ExecutionError(f"mandate retry failed: {exc}") from exc
 
 

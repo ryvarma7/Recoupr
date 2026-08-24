@@ -1,0 +1,19 @@
+# Recoupr backend — exact pins (resolved and tested together on Python 3.14).
+fastapi==0.141.1
+uvicorn==0.52.4
+sqlmodel==0.0.39
+sqlalchemy==2.0.52
+alembic==1.19.1
+psycopg==3.3.4
+anthropic==1.0.0
+razorpay==2.0.1
+tenacity==9.1.4
+apscheduler==3.11.3
+faker==40.37.0
+pydantic==2.13.4
+pydantic-settings==2.15.0
+
+# dev / test
+pytest==9.1.1
+httpx==0.28.1
+ruff==0.16.4

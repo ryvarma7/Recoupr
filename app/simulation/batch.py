@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import logging
 import random
+from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import Callable
 
 from sqlmodel import Session
 
@@ -127,9 +127,10 @@ def run_batch(
                 # Timing-blocked before ever reaching the customer — jump to the
                 # retry window first; no payment can arrive for a link never sent.
                 sim_now = max(sim_now, case.deferred_until)
+                attempt = case.attempts_count + 1
                 process_case(
                     session, case, now=sim_now,
-                    latest_failure_reason=f"retry attempt {case.attempts_count + 1} failed: {failure.error_code} recurred",
+                    latest_failure_reason=f"retry attempt {attempt} failed: {failure.error_code} recurred",
                 )
                 continue
 

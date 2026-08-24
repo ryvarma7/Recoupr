@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlmodel import Session, select
@@ -15,6 +15,7 @@ from app.models.entities import (
     Case,
     CaseState,
     DecisionStatus,
+    Event,
     EventType,
     GuardrailCheck,
     Outcome,
@@ -27,9 +28,15 @@ from app.services.pipeline import (
     process_case,
     record_recovery,
 )
-from tests.factories import make_case, make_customer, make_event, make_merchant, make_policy
+from tests.factories import (
+    make_case,
+    make_customer,
+    make_event,
+    make_merchant,
+    make_policy,
+)
 
-NOW = datetime(2026, 8, 24, 9, 0, tzinfo=timezone.utc)  # 14:30 IST — outside quiet hours
+NOW = datetime(2026, 8, 24, 9, 0, tzinfo=UTC)  # 14:30 IST — outside quiet hours
 
 
 @pytest.fixture(autouse=True)
@@ -178,7 +185,11 @@ def test_llm_timeout_falls_back_to_escalate_never_fail_open(db: Session, monkeyp
     def explode(*args, **kwargs):
         raise LLMTimedOut("simulated timeout")
 
-    monkeypatch.setattr("app.agents.diagnosis.get_llm", lambda: type("L", (), {"available": True, "classify": staticmethod(explode)})())
+    class TimeoutLLM:
+        available = True
+        classify = staticmethod(explode)
+
+    monkeypatch.setattr("app.agents.diagnosis.get_llm", lambda: TimeoutLLM())
     process_case(db, case, now=NOW)
 
     assert case.state == CaseState.ESCALATED_TO_HUMAN
@@ -205,7 +216,7 @@ def test_two_cases_on_one_order_are_linked(db: Session):
 def test_quiet_hours_block_defers_and_consumes_no_attempt(db: Session):
     """Quiet-hours proposal is deferred to morning; nothing sent, no attempt used."""
     policy, merchant, customer = _seed(db)
-    late_night = datetime(2026, 8, 24, 17, 30, tzinfo=timezone.utc)  # 23:00 IST — quiet
+    late_night = datetime(2026, 8, 24, 17, 30, tzinfo=UTC)  # 23:00 IST — quiet
     event = make_event(error_code="gateway_timeout", occurred_at=late_night)
     db.add(event)
     db.flush()
@@ -247,7 +258,7 @@ def test_approve_and_send_from_escalated_state(db: Session):
     merchant = make_merchant(db, policy)
     # Drive to escalation the honest way: three executions then a fourth wake —
     # retries exhausted → escalate_human (gate-exempt, so timing never blocks it).
-    start = datetime(2026, 8, 20, 3, 0, tzinfo=timezone.utc)   # 08:30 IST — business hours
+    start = datetime(2026, 8, 20, 3, 0, tzinfo=UTC)   # 08:30 IST — business hours
     event = make_event(error_code="gateway_timeout", occurred_at=start - timedelta(days=1))
     db.add(event)
     db.flush()

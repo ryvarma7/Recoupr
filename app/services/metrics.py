@@ -91,11 +91,13 @@ def compute_summary(session: Session, *, now: datetime | None = None) -> dict:
     real_violations = 0
     for check in checks:
         decision = decisions.get(check.decision_id)
-        if decision is None:
-            continue
-        if decision.status == DecisionStatus.EXECUTED and decision.proposed_action != "escalate_human":
-            if not check.passed:
-                real_violations += 1
+        if (
+            decision is not None
+            and decision.status == DecisionStatus.EXECUTED
+            and decision.proposed_action != "escalate_human"
+            and not check.passed
+        ):
+            real_violations += 1
 
     return {
         "cases_total": len(cases),

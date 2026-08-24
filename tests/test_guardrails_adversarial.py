@@ -3,7 +3,7 @@ the gate catches all of them. This is the safety claim of the project."""
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlmodel import Session
@@ -17,9 +17,15 @@ from app.models.entities import (
     EventType,
     FlowType,
 )
-from tests.factories import IST, make_case, make_customer, make_event, make_merchant, make_policy
+from tests.factories import (
+    make_case,
+    make_customer,
+    make_event,
+    make_merchant,
+    make_policy,
+)
 
-NOON_IST = datetime(2026, 8, 24, 12, 0, tzinfo=timezone.utc)  # 17:30 IST — outside quiet hours
+NOON_IST = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)  # 17:30 IST — outside quiet hours
 
 
 def _gate_context(**overrides) -> GateContext:
@@ -84,7 +90,8 @@ def make_flow_case(
             FlowType.SUBSCRIPTION_MANDATE: EventType.SUBSCRIPTION_CHARGE_FAILED,
         }[flow]
 
-    event = make_event(event_type=event_type, subscription_id="sub_111" if flow == FlowType.SUBSCRIPTION_MANDATE else None)
+    sub_id = "sub_111" if flow == FlowType.SUBSCRIPTION_MANDATE else None
+    event = make_event(event_type=event_type, subscription_id=sub_id)
     session.add(event)
     session.flush()
     return make_case(
@@ -189,7 +196,7 @@ def test_quiet_hours_boundaries(db: Session):
     decision = _clean_link_decision(case, channel="email")
 
     def verdict_at(hour_utc: int, minute: int = 0):
-        now = datetime(2026, 8, 24, hour_utc, minute, tzinfo=timezone.utc)
+        now = datetime(2026, 8, 24, hour_utc, minute, tzinfo=UTC)
         ctx = _gate_context(now=now, verified_channels=frozenset({"email", "sms", "whatsapp"}))
         return check_guardrails(case, decision, PolicySnapshot(case.policy_snapshot), ctx)
 
@@ -305,15 +312,19 @@ def test_unknown_action_flagged(db: Session):
 # ---------------------------------------------------------------------------
 
 def test_flows_a_and_b_can_send_links_but_c_cannot(db: Session):
-    for flow in (FlowType.PAYMENT_FAILURE, FlowType.CHECKOUT_ABANDONMENT):
+    def link_verdict(flow):
         case = make_flow_case(db, flow=flow)
-        verdict = check_guardrails(case, _clean_link_decision(case), PolicySnapshot(case.policy_snapshot), _gate_context())
+        return check_guardrails(
+            case, _clean_link_decision(case), PolicySnapshot(case.policy_snapshot), _gate_context(),
+        )
+
+    for flow in (FlowType.PAYMENT_FAILURE, FlowType.CHECKOUT_ABANDONMENT):
+        verdict = link_verdict(flow)
         assert verdict.approved, (flow, verdict.violated_rules)
 
-    case_c = make_flow_case(db, flow=FlowType.SUBSCRIPTION_MANDATE)
-    verdict = check_guardrails(case_c, _clean_link_decision(case_c), PolicySnapshot(case_c.policy_snapshot), _gate_context())
-    assert not verdict.approved
-    assert "action_flow_mismatch" in verdict.violated_rules
+    verdict_c = link_verdict(FlowType.SUBSCRIPTION_MANDATE)
+    assert not verdict_c.approved
+    assert "action_flow_mismatch" in verdict_c.violated_rules
 
 
 def test_mandate_retry_allowed_on_c_only(db: Session):
@@ -323,14 +334,14 @@ def test_mandate_retry_allowed_on_c_only(db: Session):
         proposed_action="retry_mandate_charge",
         action_params={"amount": case_c.amount},
     )
-    ctx = _gate_context(now=datetime(2026, 8, 25, 0, 0, tzinfo=timezone.utc))  # 05:30 IST — deep quiet hours
+    ctx = _gate_context(now=datetime(2026, 8, 25, 0, 0, tzinfo=UTC))  # 05:30 IST — deep quiet hours
     verdict = check_guardrails(case_c, mandate_decision, PolicySnapshot(case_c.policy_snapshot), ctx)
     assert verdict.approved, verdict.violated_rules  # agent-side retry ignores quiet hours by design
 
     for flow in (FlowType.PAYMENT_FAILURE, FlowType.CHECKOUT_ABANDONMENT):
         case = make_flow_case(db, flow=flow)
-        verdict = check_guardrails(case, mandate_decision, PolicySnapshot(case.policy_snapshot), _gate_context())
-        assert "action_flow_mismatch" in verdict.violated_rules
+        mismatch = check_guardrails(case, mandate_decision, PolicySnapshot(case.policy_snapshot), _gate_context())
+        assert "action_flow_mismatch" in mismatch.violated_rules
 
 
 # ---------------------------------------------------------------------------

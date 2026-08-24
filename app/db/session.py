@@ -25,10 +25,10 @@ def install_append_only_guards(engine: Engine) -> None:
     documented production step — see README known-limitations.)
     """
 
-    def _block_update(mapper, connection, target):  # noqa: ANN001
+    def _block_update(mapper, connection, target):
         raise RuntimeError("AuditLogEntry is append-only: UPDATE denied")
 
-    def _block_delete(mapper, connection, target):  # noqa: ANN001
+    def _block_delete(mapper, connection, target):
         raise RuntimeError("AuditLogEntry is append-only: DELETE denied")
 
     event.listen(AuditLogEntry, "before_update", _block_update)

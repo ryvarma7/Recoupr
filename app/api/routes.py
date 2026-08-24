@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlmodel import Session, select
@@ -12,13 +10,11 @@ from app.core.clock import utcnow
 from app.db.session import get_session
 from app.models.entities import (
     Action,
-    Actor,
     AuditLogEntry,
     Case,
     CaseState,
     Decision,
     Diagnosis,
-    Event,
     GuardrailCheck,
     GuardrailPolicy,
     Outcome,
@@ -258,7 +254,8 @@ def policy_view(session: Session = Depends(get_session)) -> dict:
     policy = session.exec(select(GuardrailPolicy)).first()
     if policy is None:
         raise HTTPException(status_code=404, detail="no policy configured")
-    open_cases = [c for c in session.exec(select(Case)).all() if c.state in (CaseState.NEW, CaseState.PROCESSING, CaseState.AWAITING_OUTCOME)]
+    open_states = (CaseState.NEW, CaseState.PROCESSING, CaseState.AWAITING_OUTCOME)
+    open_cases = [c for c in session.exec(select(Case)).all() if c.state in open_states]
     snapshot_versions: dict[str, int] = {}
     for c in open_cases:
         key = f"{c.policy_snapshot.get('name', 'default')}@{c.policy_snapshot.get('id', '?')}"

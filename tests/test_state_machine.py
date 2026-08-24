@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -13,8 +13,7 @@ from app.agents.state_machine import (
 )
 from app.models.entities import Actor, Case, CaseState
 
-
-NOW = datetime(2026, 8, 24, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
 
 
 class FakeCase:

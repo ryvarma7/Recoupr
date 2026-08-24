@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 import itertools
-from datetime import datetime, time, timedelta, timezone
+from datetime import UTC, datetime, time, timedelta, timezone
 
 from sqlmodel import Session
 
 from app.models.entities import (
     Case,
     Customer,
-    EventType,
     Event,
+    EventType,
     FlowType,
     GuardrailPolicy,
     Merchant,
@@ -82,7 +82,7 @@ def make_event(
         error_description=error_description,
         payload={},
         ground_truth_recoverable=ground_truth_recoverable,
-        occurred_at=occurred_at or datetime.now(timezone.utc),
+        occurred_at=occurred_at or datetime.now(UTC),
     )
 
 

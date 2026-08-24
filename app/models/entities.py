@@ -15,7 +15,7 @@ Notes
 from __future__ import annotations
 
 import enum
-from datetime import date, datetime, time, timezone
+from datetime import UTC, date, datetime, time
 
 from sqlalchemy import Column, UniqueConstraint
 from sqlalchemy.types import JSON
@@ -23,7 +23,7 @@ from sqlmodel import Field, SQLModel
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class EventType(str, enum.Enum):
@@ -213,7 +213,7 @@ class GuardrailCheck(SQLModel, table=True):
 
 class Action(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    decision_id: int | None = Field(default=None, foreign_key="decision.id")  # null for escalations with no decision behind them
+    decision_id: int | None = Field(default=None, foreign_key="decision.id")  # null for escalations (no decision)
     case_id: int = Field(foreign_key="case.id", index=True)
     action_type: str
     status: str                                    # EXECUTED | FAILED | PENDING_APPROVAL

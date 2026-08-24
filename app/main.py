@@ -66,7 +66,7 @@ def _start_maintenance_scheduler(settings) -> None:
                 report = run_maintenance(session, now=utcnow())
             if report["ttl_swept"] or report["deferred_requeued"]:
                 logger.info("maintenance pass: %s", report)
-        except Exception:  # noqa: BLE001 — a failed pass must never kill the scheduler thread
+        except Exception:
             logger.exception("maintenance pass failed")
 
     scheduler = BackgroundScheduler(timezone="UTC")

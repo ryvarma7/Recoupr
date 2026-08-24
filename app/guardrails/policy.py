@@ -7,7 +7,7 @@ never change an in-flight case's behavior.
 
 from __future__ import annotations
 
-from datetime import datetime, time, timedelta, timezone
+from datetime import UTC, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -99,5 +99,5 @@ def quiet_hours_resume_utc(now: datetime, policy: PolicySnapshot, tz: ZoneInfo) 
             hour=end.hour, minute=end.minute, second=0, microsecond=0,
         ) + timedelta(days=day_offset)
         if candidate_local > local_now:
-            return candidate_local.astimezone(timezone.utc).replace(tzinfo=None)
+            return candidate_local.astimezone(UTC).replace(tzinfo=None)
     return None  # unreachable for any sane window

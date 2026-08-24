@@ -64,7 +64,8 @@ def render_recovery_message(
     tone: str,
     short_url: str,
 ) -> str:
-    key = (language if (language, tone) in _TEMPLATES else "en", tone if tone in ("formal", "friendly", "urgent") else "friendly")
+    safe_tone = tone if tone in ("formal", "friendly", "urgent") else "friendly"
+    key = (language if (language, safe_tone) in _TEMPLATES else "en", safe_tone)
     body = _TEMPLATES[key].format(
         amount=format_amount(case.amount),
         order=case.order_id or case.subscription_id or "your purchase",

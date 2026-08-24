@@ -9,13 +9,20 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-import app.services.pipeline as pipeline_mod
 from sqlmodel import Session, select
 
+import app.services.pipeline as pipeline_mod
 from app.core.clock import as_utc
 from app.models.entities import Action, CaseState
 from app.services.pipeline import process_case
-from tests.factories import IST, make_case, make_customer, make_event, make_merchant, make_policy
+from tests.factories import (
+    IST,
+    make_case,
+    make_customer,
+    make_event,
+    make_merchant,
+    make_policy,
+)
 
 
 def _fixture_case(db: Session, *, occurred: datetime):
