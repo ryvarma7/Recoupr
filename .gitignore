@@ -1,0 +1,9 @@
+# Planning docs — local reference only, never committed
+docs/
+
+# Secrets
+.env
+
+# OS noise
+.DS_Store
+Thumbs.db
