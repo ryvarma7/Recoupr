@@ -43,7 +43,12 @@ from app.models.entities import (
     Outcome,
     OutcomeType,
 )
-from app.payments.client import ExecutionError, PaymentClient, get_payment_client
+from app.payments.client import (
+    ExecutionError,
+    PaymentClient,
+    get_payment_client,
+    get_simulated_payment_client,
+)
 from app.payments.messages import render_recovery_message
 
 logger = logging.getLogger(__name__)
@@ -116,8 +121,14 @@ def process_case(
     """Run the full diagnosis → decision → gate → execute cycle synchronously."""
     settings = get_settings()
     now = as_naive_utc(now)  # single normalization point for all caller conventions
-    client = get_payment_client()
     event = session.get(Event, case.event_id)
+    # Transport follows event provenance: synthetic events (ground-truth label
+    # present) execute through the simulated transport; live webhooks hit the
+    # configured Razorpay test-mode account. See get_simulated_payment_client.
+    simulated_transport = event is not None and event.ground_truth_recoverable is not None
+    client = (
+        get_simulated_payment_client() if simulated_transport else get_payment_client()
+    )
     customer = session.get(Customer, case.customer_id)
     policy = PolicySnapshot(case.policy_snapshot)
     # Normalize any tz-aware datetimes the case arrived with (e.g. created via
@@ -233,6 +244,11 @@ def process_case(
 # Execution helpers
 # ---------------------------------------------------------------------------
 
+def transport_label(client: PaymentClient) -> str:
+    """Factual transport tag for the audit ledger — what actually executed."""
+    return "mock transport" if client.is_mock else "razorpay test-mode API"
+
+
 def _execute(session: Session, case: Case, decision: Decision, client: PaymentClient, *, now: datetime) -> None:
     action_type = decision.proposed_action
 
@@ -278,7 +294,9 @@ def _execute(session: Session, case: Case, decision: Decision, client: PaymentCl
         lang = decision.action_params.get("language")
         tone = decision.action_params.get("tone")
         audit(session, case, actor=Actor.AGENT,
-              summary=f"payment link sent via {channel} ({link['id']}) [{lang}/{tone}]", now=now)
+              summary=(f"payment link sent via {channel} ({link['id']}) [{lang}/{tone}] "
+                       f"[{transport_label(client)}]"),
+              now=now)
 
     elif action_type == "retry_mandate_charge":
         result = client.retry_mandate(
@@ -292,7 +310,9 @@ def _execute(session: Session, case: Case, decision: Decision, client: PaymentCl
         ))
         decision.status = DecisionStatus.EXECUTED
         audit(session, case, actor=Actor.AGENT,
-              summary=f"mandate retry submitted on {case.subscription_id} ({result['id']})", now=now)
+              summary=(f"mandate retry submitted on {case.subscription_id} ({result['id']}) "
+                       f"[{transport_label(client)}]"),
+              now=now)
 
     else:  # unreachable — gate rejects unknown actions
         raise ExecutionError(f"unknown action type {action_type}")

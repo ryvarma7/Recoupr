@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import secrets
 
+from razorpay.errors import BadRequestError, GatewayError, ServerError
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -24,6 +25,18 @@ from tenacity import (
 from app.core.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
+
+# Transient failures worth backing off and retrying. Razorpay rate limits
+# surface as BadRequestError ("Too many requests"); upstream wobbles as
+# Gateway/ServerError. A retried link creation cannot duplicate anything the
+# customer sees — a request that errored never produced a link.
+RAZORPAY_TRANSIENT_ERRORS: tuple[type[Exception], ...] = (
+    ConnectionError,
+    TimeoutError,
+    BadRequestError,
+    GatewayError,
+    ServerError,
+)
 
 
 class ExecutionError(RuntimeError):
@@ -99,9 +112,9 @@ class RealRazorpayClient:
         self._sdk = razorpay.Client(auth=(key_id, key_secret))
 
     @retry(
-        retry=retry_if_exception_type((ConnectionError, TimeoutError)),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=0.5, max=4),
+        retry=retry_if_exception_type(RAZORPAY_TRANSIENT_ERRORS),
+        stop=stop_after_attempt(4),
+        wait=wait_exponential(multiplier=1, max=10),
         reraise=True,
     )
     def create_payment_link(
@@ -123,7 +136,9 @@ class RealRazorpayClient:
             "reference_id": reference_id,
             "description": description,
             "expire_by": int(_time.time()) + expire_seconds,
-            "options": {"checkout": {"method": {"netbanking", "upi", "card"}}},
+            # Checkout method-enablement object (JSON-serializable; a set literal
+            # here passed the mock but broke the real SDK's JSON encoding).
+            "options": {"checkout": {"method": {"netbanking": "1", "upi": "1", "card": "1"}}},
         }
         link = self._sdk.payment_link.create(data)
         if single_use:
@@ -134,14 +149,15 @@ class RealRazorpayClient:
         return link
 
     @retry(
-        retry=retry_if_exception_type((ConnectionError, TimeoutError)),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=0.5, max=4),
+        retry=retry_if_exception_type(RAZORPAY_TRANSIENT_ERRORS),
+        stop=stop_after_attempt(4),
+        wait=wait_exponential(multiplier=1, max=10),
         reraise=True,
     )
     def retry_mandate(self, *, subscription_id: str, amount: int, reference_id: str) -> dict:
-        # Token-based recurring charge against a stored mandate (e-NACH / UPI Autopay).
-        payment = self._sdk.payment.create(
+        # Recurring charge against a stored mandate (e-NACH / UPI Autopay). The
+        # SDK exposes this as payment.createRecurring — Payment has no `.create`.
+        payment = self._sdk.payment.createRecurring(
             {
                 "amount": amount,
                 "currency": "INR",
@@ -157,12 +173,13 @@ class RealRazorpayClient:
 class PaymentClient:
     """Public facade — picks mock vs real internally from settings."""
 
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(self, settings: Settings | None = None, *, force_mock: bool = False) -> None:
         self._settings = settings or get_settings()
         self._impl: MockRazorpayClient | RealRazorpayClient
-        if self._settings.razorpay_mock:
+        if force_mock or self._settings.razorpay_mock:
+            if not force_mock:
+                logger.warning("RAZORPAY_MOCK — returning simulated test-mode responses")
             self._impl = MockRazorpayClient()
-            logger.warning("RAZORPAY_MOCK — returning simulated test-mode responses")
         else:
             _assert_test_mode(self._settings.razorpay_key_id)
             self._impl = RealRazorpayClient(self._settings.razorpay_key_id, self._settings.razorpay_key_secret)
@@ -185,10 +202,28 @@ class PaymentClient:
 
 
 _client_singleton: PaymentClient | None = None
+_simulated_singleton: PaymentClient | None = None
 
 
 def get_payment_client() -> PaymentClient:
+    """Transport for LIVE events received through /webhooks/razorpay."""
     global _client_singleton
     if _client_singleton is None:
         _client_singleton = PaymentClient()
     return _client_singleton
+
+
+def get_simulated_payment_client() -> PaymentClient:
+    """Transport for SYNTHETIC events (batch simulation, demo generator).
+
+    Transport follows event provenance. Synthetic events describe customers,
+    orders and mandates that exist only inside the simulator — charging them
+    through the real API cannot work (fabricated subscription ids 404) and
+    would burn the connected test account's payment-link quota (~30 active
+    links) on people who don't exist. Live webhook events always execute
+    against the configured Razorpay test-mode account.
+    """
+    global _simulated_singleton
+    if _simulated_singleton is None:
+        _simulated_singleton = PaymentClient(force_mock=True)
+    return _simulated_singleton

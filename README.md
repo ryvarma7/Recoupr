@@ -43,14 +43,18 @@ A 200-case seeded replay (`POST /simulate/batch {"count": 200, "seed": 42}`), 28
 | Metric | Value | Reading |
 |---|---|---|
 | Recovery rate (global) | ~63% | recovered ÷ (recovered + lost) |
-| Settled-cohort rate | ~55–62% | cases whose **full** observation window elapsed — censoring-free |
-| Mean time to recovery | ~39h | from case creation to matched payment |
+| Settled-cohort rate | ~45–60% | cases whose **full** observation window elapsed — censoring-free |
+| Mean time to recovery | ~46h | from case creation to matched payment |
 | Escalation load | ~13% | anomalies only, not routine non-response |
 | False-positive rate | ~49% | share of acted-on cases whose ground truth said unrecoverable |
 | Guardrail violations | **0** | the invariant that must never move |
-| Guardrail blocks | ~95 | the gate doing its job, reported separately |
+| Guardrail blocks | ~108 | the gate doing its job, reported separately |
 
 A near-90% recovery rate would mean the simulator is broken, not that the agent is good — most failed payments are genuinely unrecoverable (expired cards, cancelled mandates, no balance). The settled-cohort rate exists because the global rate is censored: recoveries resolve at any age while losses need a full TTL, so a bounded history over-weights the loss-free recent tail.
+
+### Execution transport follows event provenance
+
+Live webhook events (`POST /webhooks/razorpay`) execute against the configured Razorpay **test-mode** account — real `plink_…` objects, real mandate-retry calls. Synthetic events from the batch simulator execute through a simulated transport instead, and the audit ledger tags which one ran (`[razorpay test-mode API]` / `[mock transport]`). This isn't a fallback: synthetic events describe customers, orders and mandates that exist only inside the simulator — charging them against a real account cannot work (fabricated subscription ids are rejected) and would burn the connected account's payment-link quota (~30 active links in test mode) on people who don't exist.
 
 ## Run it
 
@@ -90,7 +94,7 @@ Postgres deployments run `alembic upgrade head` (the initial migration is checke
 
 ## Tests
 
-54 tests, including an adversarial suite that builds **one proposal violating all fifteen rules at once** and asserts the gate catches every one; purity tests (the gate never mutates state, never consumes an attempt); boundary tests (quiet-hour edges, cooldown exact-6h, message-cap 7-day window); flow-authority tests (links only on A/B, mandate retry only on C); and batch honesty tests (zero violations, believable settled-cohort band, no recovery stamped before its case existed or after the replay clock).
+58 tests, including an adversarial suite that builds **one proposal violating all fifteen rules at once** and asserts the gate catches every one; purity tests (the gate never mutates state, never consumes an attempt); boundary tests (quiet-hour edges, cooldown exact-6h, message-cap 7-day window); flow-authority tests (links only on A/B, mandate retry only on C); real-client payload hygiene (JSON-serializable bodies, `createRecurring` for mandates — both regressions found by pointing the suite's server at real test-mode keys) and transport-provenance selection; and batch honesty tests (zero violations, believable settled-cohort band, no recovery stamped before its case existed or after the replay clock). Tests are hermetic: a developer's `.env` credentials can't leak in.
 
 ```bash
 pytest -q && ruff check .
@@ -117,6 +121,6 @@ app/
   simulation/   labeled synthetic event generator · batch replay
   db/           session · append-only guards · Alembic migrations
 dashboard/      Next.js 16 · React 19 · Tailwind 4 ledger console
-tests/          54 tests incl. adversarial gate suite
+tests/          58 tests incl. adversarial gate suite
 docs/           local planning material (gitignored, never committed)
 ```

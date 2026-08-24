@@ -12,17 +12,22 @@ from app.db.session import install_append_only_guards
 def _hermetic_environment(monkeypatch):
     """Keep tests deterministic regardless of the host machine's credentials.
 
-    This dev box has ANTHROPIC_API_KEY exported globally; without this fixture
-    'LLM_DISABLED' mode silently wouldn't be disabled under pytest.
+    Two leak paths are closed here:
+    - exported shell vars (this dev box exports ANTHROPIC_API_KEY globally);
+    - the gitignored ``.env`` file, which pydantic-settings reads from disk even
+      after the matching process env var is deleted. pydantic-settings gives
+      process env vars precedence over dotenv files, so forcing an *empty*
+      value pins each subsystem to its mock/disabled mode no matter what
+      credentials the developer's own .env carries.
     """
-    for var in (
-        "ANTHROPIC_API_KEY",
-        "RAZORPAY_KEY_ID",
-        "RAZORPAY_KEY_SECRET",
-        "RAZORPAY_WEBHOOK_SECRET",
-        "DATABASE_URL",
-    ):
-        monkeypatch.delenv(var, raising=False)
+    for var in ("ANTHROPIC_API_KEY", "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET"):
+        monkeypatch.setenv(var, "")
+    # Sender registration back to documented defaults (a demo .env may verify them).
+    monkeypatch.setenv("SMS_SENDER_VERIFIED", "false")
+    monkeypatch.setenv("WHATSAPP_SENDER_VERIFIED", "false")
+    # An empty DATABASE_URL would break engine creation — delete instead of
+    # shadowing so settings fall back to its own default.
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     # TestClient startup must not spawn background scheduler threads mid-test.
     monkeypatch.setenv("RECOUPR_SCHEDULER_ENABLED", "false")
     get_settings.cache_clear()
