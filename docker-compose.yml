@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: recoupr
+      POSTGRES_PASSWORD: recoupr
+      POSTGRES_DB: recoupr
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U recoupr"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+  backend:
+    build: .
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    environment:
+      DATABASE_URL: postgresql://recoupr:recoupr@db:5432/recoupr
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SMS_SENDER_VERIFIED: ${SMS_SENDER_VERIFIED:-false}
+      WHATSAPP_SENDER_VERIFIED: ${WHATSAPP_SENDER_VERIFIED:-false}
+      MERCHANT_TIMEZONE: ${MERCHANT_TIMEZONE:-Asia/Kolkata}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  dashboard:
+    image: node:22-alpine
+    working_dir: /srv
+    command: sh -c "npm install --no-audit --no-fund && npm run dev"
+    volumes:
+      - ./dashboard:/srv
+    environment:
+      NEXT_PUBLIC_API_BASE: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

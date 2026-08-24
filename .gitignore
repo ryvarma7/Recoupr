@@ -4,6 +4,19 @@ docs/
 # Secrets
 .env
 
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.db
+.pytest_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+.next/
+out/
+
 # OS noise
 .DS_Store
 Thumbs.db
