@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 
 from sqlmodel import Session
 
+from app.core.clock import as_naive_utc
 from app.models.entities import (
     Case,
     CaseState,
@@ -38,12 +39,20 @@ _MAX_LOOP_GUARD = 8
 
 # Outcome-model calibration: a healthy batch should land in a believable
 # 35–55% recovery band. Per-wake conversion is well below the headline rate
-# because probability compounds across several observation wakes.
+# because probability compounds across several observation wakes. The
+# unrecoverable leak is kept small: customers who were going to pay anyway do
+# so quickly, and a large per-wake leak would compound across a 14-day TTL
+# until "unrecoverable" lost its meaning.
 PAY_PROB_RECOVERABLE = 0.40
-PAY_PROB_UNRECOVERABLE = 0.04
+PAY_PROB_UNRECOVERABLE = 0.02
 # Attention decay while HOLDING after the retry cap: an outstanding link still
 # converts, but at a fading rate the longer the customer ignores it.
 _HOLD_DECAY = 0.15
+# Replay history length: two TTL windows. Recoveries can land at any age, but a
+# LOST resolution needs the full case TTL (14 days) to elapse — a shorter window
+# starves the loss side and silently inflates the recovery rate. Cases inside
+# the newest TTL stay open, exactly as a live console would show them.
+_TIMELINE_DAYS = 28
 
 
 def _ingest(session: Session, failure: SyntheticFailure) -> Event:
@@ -80,8 +89,18 @@ def run_batch(
     count: int = 200,
     seed: int | None = None,
     progress: ProgressCallback | None = None,
+    now: datetime | None = None,
 ) -> dict:
+    """Replay `count` synthetic failures through the real pipeline.
+
+    The replay never fabricates the future: observation wakes, recoveries, and
+    TTL closures are only recorded up to `now` (the wall clock unless overridden).
+    Cases whose story hasn't finished by then stay AWAITING_OUTCOME — exactly as
+    a live console would show them — and the real maintenance scheduler finishes
+    them. Pass `now` explicitly for fully deterministic reports.
+    """
     rng = random.Random(seed)
+    real_now = as_naive_utc(now) if now is not None else datetime.now().astimezone().replace(tzinfo=None)
     run_row = SimulationRun(seed=seed, cases_requested=count)
     session.add(run_row)
     session.flush()
@@ -93,9 +112,10 @@ def run_batch(
     ensure_default_merchant(session)
     generator = SyntheticEventGenerator(seed=seed)
 
-    # Timeline starts "now" minus a day so all cases are already live.
-    start_at = datetime.now().astimezone().replace(tzinfo=None) - timedelta(days=1)
-    failures = generator.generate_batch(count=count, start_at=start_at)
+    # Timeline spans the twenty days ending now, so the batch reads as history:
+    # older cases have fully resolved, recent ones are still open.
+    start_at = real_now - timedelta(days=_TIMELINE_DAYS)
+    failures = generator.generate_batch(count=count, start_at=start_at, span_hours=_TIMELINE_DAYS * 24)
     wall_start = datetime.now()
 
     cases: list[tuple[Case, SyntheticFailure]] = []
@@ -126,6 +146,8 @@ def run_batch(
             if case.deferred_until is not None and case.attempts_count == 0:
                 # Timing-blocked before ever reaching the customer — jump to the
                 # retry window first; no payment can arrive for a link never sent.
+                if case.deferred_until > real_now:
+                    break  # the retry wake itself hasn't happened yet — stays open
                 sim_now = max(sim_now, case.deferred_until)
                 attempt = case.attempts_count + 1
                 process_case(
@@ -137,7 +159,9 @@ def run_batch(
             if rng.random() < pay_prob:
                 recovered_at = sim_now + timedelta(minutes=rng.randrange(20, 60 * 18))
                 if case.case_deadline_at is not None and recovered_at >= case.case_deadline_at:
-                    break  # payment would land past TTL → stays open; TTL sweep closes it
+                    break  # payment would land past TTL → the TTL sweep closes it
+                if recovered_at > real_now:
+                    break  # payment hasn't actually landed yet — the case stays open
                 record_recovery(
                     session, case,
                     payment_id=f"pay_{rng.randrange(16**10):010x}",
@@ -148,8 +172,12 @@ def run_batch(
 
             next_wake = sim_now + timedelta(hours=cooldown_hours)
             if case.case_deadline_at is not None and next_wake >= case.case_deadline_at:
-                mark_lost(session, case, now=case.case_deadline_at)
+                if case.case_deadline_at <= real_now:
+                    mark_lost(session, case, now=case.case_deadline_at)
                 break
+
+            if next_wake > real_now:
+                break  # next observation wake is in the future — nothing recorded yet
 
             if case.attempts_count >= max_retries or case.messages_sent_count >= message_cap:
                 # Policy exhausted (retry cap and/or message cap) but the last
@@ -161,8 +189,11 @@ def run_batch(
                 while case.state == CaseState.AWAITING_OUTCOME:
                     sim_now += timedelta(hours=12)
                     if case.case_deadline_at is not None and sim_now >= case.case_deadline_at:
-                        mark_lost(session, case, now=case.case_deadline_at)
+                        if case.case_deadline_at <= real_now:
+                            mark_lost(session, case, now=case.case_deadline_at)
                         break
+                    if sim_now > real_now:
+                        break  # past the wall clock — the link is still live
                     if rng.random() < pay_prob * _HOLD_DECAY:
                         record_recovery(
                             session, case,
@@ -178,11 +209,39 @@ def run_batch(
             new_reason = f"retry attempt {case.attempts_count + 1} failed: {failure.error_code} recurred"
             process_case(session, case, now=sim_now, latest_failure_reason=new_reason)
 
-        if case.state == CaseState.AWAITING_OUTCOME and case.case_deadline_at is not None:
+        # TTL sweep only for deadlines that have genuinely elapsed; cases still
+        # inside their observation window remain open for the real scheduler.
+        if (
+            case.state == CaseState.AWAITING_OUTCOME
+            and case.case_deadline_at is not None
+            and case.case_deadline_at <= real_now
+        ):
             mark_lost(session, case, now=case.case_deadline_at)
         session.commit()
 
     summary = compute_summary(session, now=datetime.now().astimezone())
+
+    # Settled cohort — cases whose full observation window (TTL) has elapsed, so
+    # every one of them has had its complete chance to recover or be lost. The
+    # global rate is censored: recoveries resolve at any age while losses need a
+    # full TTL, so a bounded history structurally over-weights the loss-free
+    # recent tail. The settled rate is the censoring-free number.
+    settled = [
+        c for c, _ in cases
+        if c.case_deadline_at is not None and c.case_deadline_at <= real_now
+    ]
+    settled_recovered = sum(1 for c in settled if c.state == CaseState.RECOVERED)
+    settled_lost = sum(1 for c in settled if c.state == CaseState.LOST)
+    settled_denom = settled_recovered + settled_lost
+    summary["settled_cohort"] = {
+        "cases": len(settled),
+        "recovered": settled_recovered,
+        "lost": settled_lost,
+        "escalated": sum(1 for c in settled if c.state == CaseState.ESCALATED_TO_HUMAN),
+        "stopped": sum(1 for c in settled if c.state == CaseState.STOPPED_UNRECOVERABLE),
+        "recovery_rate": round(settled_recovered / settled_denom, 4) if settled_denom else 0.0,
+    }
+
     summary["ground_truth"] = {
         "labeled_cases": len(cases),
         "recoverable_labeled": sum(1 for _, f in cases if f.ground_truth_recoverable),
@@ -200,9 +259,16 @@ def run_batch(
     emit(
         f"batch complete — {summary['cases_total']} cases · "
         f"{summary['recovered']} recovered ({summary['recovery_rate']:.1%}) · "
+        f"settled-cohort rate {summary['settled_cohort']['recovery_rate']:.1%} "
+        f"({summary['settled_cohort']['cases']} settled) · "
         f"guardrail violations: {summary['guardrail_violations']}"
     )
-    logger.info("batch %s finished: %.1f%% recovery rate", run_row.id, summary["recovery_rate"] * 100)
+    logger.info(
+        "batch %s finished: %.1f%% recovery rate (settled %.1f%%)",
+        run_row.id,
+        summary["recovery_rate"] * 100,
+        summary["settled_cohort"]["recovery_rate"] * 100,
+    )
     return summary
 
 

@@ -86,6 +86,10 @@ def create_case_for_event(session: Session, event: Event, *, now: datetime) -> C
         customer_id=customer.id,  # type: ignore[arg-type]
         policy_snapshot=policy_row.snapshot(),
         case_deadline_at=now + timedelta(days=policy_row.case_ttl_days),
+        # Stamp explicitly: the default_factory would write the wall clock, which
+        # is wrong for replayed/simulated timelines (and makes TTR go negative).
+        created_at=now,
+        updated_at=now,
     )
     session.add(case)
     session.flush()

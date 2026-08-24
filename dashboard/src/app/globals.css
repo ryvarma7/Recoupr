@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+/*
+ * Recoupr ledger tokens.
+ * Chart marks + text variants were validated with the dataviz six-checks
+ * validator against paper #F0F2EC (all pass; green↔rust protan ΔE 6.4 WARN
+ * is covered by shipped secondary encoding: 2px surface gaps, legends,
+ * direct labels, tooltips). Text variants clear WCAG 4.5:1 on paper.
+ */
+@theme {
+  --color-paper: #f0f2ec;
+  --color-paper-raise: #f6f7f3;
+  --color-paper-sink: #e8eae2;
+  --color-ink: #10241c;
+  --color-muted: #5a625b;
+  --color-faint: #8a8b80;
+
+  --color-hairline: #d8dad0;
+  --color-hairline-strong: #b9bbad;
+
+  /* chart marks (≥3:1 on paper) */
+  --color-mark-green: #177a53;
+  --color-mark-rust: #b0752f;
+  --color-mark-brick: #8c2e26;
+  --color-track: #c9cbc0; /* open/pending segment */
+  --color-slate: #55645c; /* stopped segment */
+
+  /* text-safe variants of the marks (≥4.5:1 on paper) */
+  --color-text-green: #14603f;
+  --color-text-rust: #8f5620;
+  --color-text-brick: #82281f;
+
+  --font-display: "Fraunces", "Georgia", serif;
+  --font-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", monospace;
+}
+
+html {
+  background: var(--color-paper);
+}
+
+body {
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+
+/* Hairline rules that read like a ruled ledger page. */
+.rule-t {
+  border-top: 1px solid var(--color-hairline);
+}
+.rule-b {
+  border-bottom: 1px solid var(--color-hairline);
+}
+.rule-r {
+  border-right: 1px solid var(--color-hairline);
+}
+
+/* Focus visibility without breaking the flat aesthetic. */
+:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 1px;
+}
+
+/* Thin scrollbars inside panels. */
+.slim-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.slim-scroll::-webkit-scrollbar-thumb {
+  background: var(--color-hairline-strong);
+}
+.slim-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Slide-in for the case detail drawer. */
+@keyframes drawer-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.drawer-in {
+  animation: drawer-in 0.22s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.fade-up {
+  animation: fade-up 0.25s ease-out both;
+}

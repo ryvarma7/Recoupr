@@ -124,13 +124,15 @@ def _template_candidates(
 
     if case.flow_type == FlowType.SUBSCRIPTION_MANDATE:
         if diagnosis.root_cause_category == "mandate_revoked":
+            # A revoked mandate can't be retried, and Flow C holds no link
+            # authority — renewal needs the customer to re-authorise, which is
+            # outside the agent's bounded actions. Escalate honestly instead of
+            # proposing an action the gate must refuse.
             return (
-                [
-                    ("send_payment_link", {"note": "renew-mandate link"}),
-                    ("escalate_human",
-                     {"reason": "mandate revoked; renewal needs customer action", "queue": "ops-review"}),
-                ],
-                "mandate revoked — customer must re-authorise",
+                [("escalate_human",
+                  {"reason": "mandate revoked — renewal needs customer re-authorisation",
+                   "queue": "ops-review"})],
+                "mandate revoked — re-authorisation is outside the agent's bounded actions",
             )
         viable = f"mandate retry viable after '{diagnosis.root_cause_category}'"
         return ([("retry_mandate_charge", {})], viable)
