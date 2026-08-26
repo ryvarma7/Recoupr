@@ -1,10 +1,10 @@
-"""Diagnosis agent — rule layer first, Claude for the ambiguous remainder.
+"""Diagnosis agent — rule layer first, the LLM only for the ambiguous remainder.
 
 A deterministic rule layer intercepts any event carrying a known Razorpay error
 code or a recognisable error description (no LLM call, method="rule"). Everything
-else goes to claude-sonnet-5 with structured output (method="llm"). When the LLM
-is disabled and no rule matches, a conservative heuristic classifies as unknown
-(method="fallback") and the decision layer treats low confidence accordingly.
+else goes to the configured Groq model with structured output (method="llm").
+When the LLM is disabled and no rule matches, a conservative heuristic classifies
+as unknown (method="fallback") and the decision layer treats low confidence accordingly.
 
 `method` is recorded on every row so the rule-vs-model split is auditable.
 """

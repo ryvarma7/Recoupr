@@ -28,8 +28,8 @@ webhook ──▶ Event ──▶ Case ──▶ DIAGNOSIS ──▶ DECISION �
                                                     ever sit here)                    TTL loss)
 ```
 
-- **Diagnosis** — a deterministic rule table over known Razorpay error codes; unknown codes go to Claude (claude-sonnet-5, structured output); unclassifiable failures fall back to *escalate*, never guess.
-- **Decision** — a template layer computes the *candidate action set* from policy, consent, verification state and diagnosis; Claude may only choose among candidates and pick message language/tone (English, Hindi, Hinglish).
+- **Diagnosis** — a deterministic rule table over known Razorpay error codes; unknown codes go to a Groq-hosted LLM (`openai/gpt-oss-20b`, JSON-mode structured output); unclassifiable failures fall back to *escalate*, never guess.
+- **Decision** — a template layer computes the *candidate action set* from policy, consent, verification state and diagnosis; the LLM may only choose among candidates and pick message language/tone (English, Hindi, Hinglish).
 - **Guardrail gate** — plain Python. Fifteen rules including flow/action authority, retry & message caps, quiet hours, cooldown, consent, sender verification, amount immutability, single-use `rzp.io`-hosted links, and sensitive-content scanning (the message can never ask for OTP, card number, or PIN). Timing-rule violations **defer** to the next legal window; anything else blocks and escalates.
 - **Execution** — Razorpay test-mode APIs only. `attempts_count` increments only on real execution, never on a proposal or a block.
 - **Proof** — a case is `RECOVERED` only when a real payment event matches it via `notes.reference_id`. Everything else ends `LOST`, `ESCALATED_TO_HUMAN`, or `STOPPED_UNRECOVERABLE`. No dangling cases.
@@ -88,7 +88,7 @@ Postgres deployments run `alembic upgrade head` (the initial migration is checke
 | `DATABASE_URL` | SQLite `recoupr.db` | Postgres URL for production shapes |
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | mock client | a `rzp_live_…` key **refuses to start** |
 | `RAZORPAY_WEBHOOK_SECRET` | — | HMAC verification; required for real webhook mode |
-| `ANTHROPIC_API_KEY` | — | absent ⇒ deterministic-only mode (rule table + template decisions) |
+| `GROQ_API_KEY` / `GROQ_MODEL` | — / `openai/gpt-oss-20b` | absent key ⇒ deterministic-only mode (rule table + template decisions) |
 | `SMS_SENDER_VERIFIED` / `WHATSAPP_SENDER_VERIFIED` | false | DLT/WhatsApp registration simulation for demos |
 | `MERCHANT_TIMEZONE` | Asia/Kolkata | quiet-hours evaluation |
 
@@ -107,7 +107,8 @@ pytest -q && ruff check .
 - **Attribution is conservative but imperfect.** A matched payment proves the customer paid; it can't prove the message *caused* it. The false-positive rate is the honest acknowledgment: ~49% of acted-on cases were likely coming back anyway.
 - **Timing rules defer rather than escalate.** Quiet-hours/cooldown blocks reschedule the proposal (no attempt consumed) instead of paging a human — a deliberate deviation from "every block escalates," because a 11pm proposal isn't an emergency.
 - **The global recovery rate is censored** on any bounded history; use the settled-cohort rate for decision-making.
-- **LLM is optional by design.** Without `ANTHROPIC_API_KEY` the system degrades to fully deterministic behavior; it never fails open.
+- **LLM is optional by design.** Without `GROQ_API_KEY` the system degrades to fully deterministic behavior; it never fails open.
+- **LLM responses are memoized** (`llmcacheentry`, keyed on the exact request — temperature 0 makes that safe) so repeated prompts don't burn free-tier TPM quota; a re-run of the same batch costs zero API calls. A 429 backs off per `Retry-After` before failing safe to escalate.
 
 ## Layout
 

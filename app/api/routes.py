@@ -220,7 +220,7 @@ def guardrail_log(limit: int = Query(default=200, le=1000), session: Session = D
             "violated_rules": check.violated_rules,
             "created_at": check.created_at.isoformat(),
         })
-    return {"total": len(out), "checks": out}
+    return {"total": len(checks), "checks": out}
 
 
 @router.get("/audit-log")

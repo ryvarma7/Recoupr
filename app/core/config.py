@@ -24,8 +24,10 @@ class Settings(BaseSettings):
     razorpay_key_secret: str = ""
     razorpay_webhook_secret: str = ""
 
-    # Anthropic — empty means LLM_DISABLED (rule-only diagnosis, template decisions).
-    anthropic_api_key: str = ""
+    # Groq (OpenAI-compatible) — empty means LLM_DISABLED (rule-only diagnosis,
+    # template decisions). Model is a free-tier chat model; see README.
+    groq_api_key: str = ""
+    groq_model: str = "openai/gpt-oss-20b"
 
     # Simulated DLT / WhatsApp Business sender registration.
     sms_sender_verified: bool = False
@@ -49,7 +51,7 @@ class Settings(BaseSettings):
 
     @property
     def llm_disabled(self) -> bool:
-        return not self.anthropic_api_key
+        return not self.groq_api_key
 
     @property
     def tz(self) -> ZoneInfo:
@@ -69,7 +71,11 @@ def subsystem_modes(settings: Settings) -> dict[str, str]:
         "webhook_signature": (
             "BYPASSED (no secret configured; mock mode only)" if settings.webhook_secret_bypassed else "enforced"
         ),
-        "llm": "LLM_DISABLED (rule-only diagnosis, template decisions)" if settings.llm_disabled else "claude-sonnet-5",
+        "llm": (
+            "LLM_DISABLED (rule-only diagnosis, template decisions)"
+            if settings.llm_disabled
+            else f"groq:{settings.groq_model}"
+        ),
         "sms_sender": "verified" if settings.sms_sender_verified else "UNVERIFIED (channel blocked by gate)",
         "whatsapp_sender": "verified" if settings.whatsapp_sender_verified else "UNVERIFIED (channel blocked by gate)",
     }

@@ -7,7 +7,7 @@ Structure:
 1. A deterministic template layer computes the *candidate* action set from the
    policy snapshot, case history, channel consent/verification state, and the
    diagnosis — this always runs, with or without an LLM.
-2. When the LLM is enabled AND the diagnosis is confident enough, Claude chooses
+2. When the LLM is enabled AND the diagnosis is confident enough, the LLM chooses
    among the candidates and picks message language/tone (including Hinglish).
    Its answer is validated against the candidate set; anything invalid falls
    back to the template choice.

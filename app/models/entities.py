@@ -266,5 +266,22 @@ class SimulationRun(SQLModel, table=True):
     finished_at: datetime | None = None
 
 
+class LLMCacheEntry(SQLModel, table=True):
+    """Persistent LLM response cache — free-tier TPM defence, not a reasoning record.
+
+    Key is a sha256 over the exact request (model + system + prompt), so a model
+    switch misses by construction; temperature=0 makes the stored answer equivalent
+    to a fresh call. Transport-level memoization like HTTP caching: diagnoses served
+    from cache keep method="llm" because the content IS the model's output.
+    Deliberately not audited as a case event — no case state depends on hit vs miss.
+    """
+
+    key: str = Field(primary_key=True)
+    model: str
+    schema_name: str
+    response_json: str
+    created_at: datetime = Field(default_factory=_utcnow)
+
+
 def today() -> date:
     return _utcnow().date()

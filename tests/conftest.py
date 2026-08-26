@@ -13,14 +13,20 @@ def _hermetic_environment(monkeypatch):
     """Keep tests deterministic regardless of the host machine's credentials.
 
     Two leak paths are closed here:
-    - exported shell vars (this dev box exports ANTHROPIC_API_KEY globally);
+    - exported shell vars;
     - the gitignored ``.env`` file, which pydantic-settings reads from disk even
       after the matching process env var is deleted. pydantic-settings gives
       process env vars precedence over dotenv files, so forcing an *empty*
       value pins each subsystem to its mock/disabled mode no matter what
       credentials the developer's own .env carries.
     """
-    for var in ("ANTHROPIC_API_KEY", "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET"):
+    for var in (
+        "GROQ_API_KEY",
+        "GROQ_MODEL",
+        "RAZORPAY_KEY_ID",
+        "RAZORPAY_KEY_SECRET",
+        "RAZORPAY_WEBHOOK_SECRET",
+    ):
         monkeypatch.setenv(var, "")
     # Sender registration back to documented defaults (a demo .env may verify them).
     monkeypatch.setenv("SMS_SENDER_VERIFIED", "false")

@@ -25,8 +25,9 @@ Build sequence and per-phase prompts: /docs/build-guide.md.
 
 ## Stack pins
 
-Python 3.12+, FastAPI, SQLModel, Alembic, PostgreSQL 16, Anthropic SDK
-(claude-sonnet-5), razorpay 2.x, tenacity, APScheduler 3.x, Faker,
+Python 3.12+, FastAPI, SQLModel, Alembic, PostgreSQL 16, Groq API
+(openai/gpt-oss-20b via httpx, OpenAI-compatible), razorpay 2.x, tenacity,
+APScheduler 3.x, Faker,
 pytest + pytest-asyncio + httpx. Frontend: Next.js, React 19, Tailwind 4,
 Recharts (sparklines only).
 No LangGraph or any agent framework — hand-rolled state machine only.
