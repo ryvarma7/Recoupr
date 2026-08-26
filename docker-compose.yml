@@ -6,7 +6,8 @@ services:
       POSTGRES_PASSWORD: recoupr
       POSTGRES_DB: recoupr
     ports:
-      - "5432:5432"
+      # Host 5432 is held by a locally-installed Postgres; expose on 5433 instead.
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -17,13 +18,16 @@ services:
 
   backend:
     build: .
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    # Migrations run before serve — Postgres deployments don't get create_all.
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     environment:
-      DATABASE_URL: postgresql://recoupr:recoupr@db:5432/recoupr
+      # +psycopg driver suffix: requirements pin psycopg 3, not psycopg2.
+      DATABASE_URL: postgresql+psycopg://recoupr:recoupr@db:5432/recoupr
       RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
       RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
       RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
       SMS_SENDER_VERIFIED: ${SMS_SENDER_VERIFIED:-false}
       WHATSAPP_SENDER_VERIFIED: ${WHATSAPP_SENDER_VERIFIED:-false}
       MERCHANT_TIMEZONE: ${MERCHANT_TIMEZONE:-Asia/Kolkata}
@@ -42,7 +46,8 @@ services:
     environment:
       NEXT_PUBLIC_API_BASE: http://localhost:8000
     ports:
-      - "3000:3000"
+      # Host 3000 is claimed by stale Docker/WSL proxies on this machine; use 3100.
+      - "3100:3000"
     depends_on:
       - backend
 

@@ -1,0 +1,15 @@
+# Keep build context small — the image only needs requirements.txt, alembic.ini, app/.
+.git
+.venv
+.env
+recoupr.db
+.claude-shots
+docs
+tests
+dashboard
+node_modules
+.next
+**/__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache

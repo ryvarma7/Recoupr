@@ -16,6 +16,10 @@ __pycache__/
 node_modules/
 .next/
 out/
+dashboard/tsconfig.tsbuildinfo
+
+# Session screenshots (local reference only)
+.claude-shots/
 
 # OS noise
 .DS_Store
