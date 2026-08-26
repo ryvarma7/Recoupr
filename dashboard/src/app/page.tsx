@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { BatchRunner } from "@/components/BatchRunner";
 import { CaseDrawer } from "@/components/CaseDrawer";
 import { CaseFeed } from "@/components/CaseFeed";
@@ -26,12 +26,35 @@ export default function Home() {
   const data = useDashboard();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const selectedRef = useRef<CaseSummary | null>(null);
+  const [activeSection, setActiveSection] = useState<string>("overview");
 
   const openCase = useCallback((c: CaseSummary) => {
     selectedRef.current = c;
     setSelectedId(c.id);
   }, []);
   const close = useCallback(() => setSelectedId(null), []);
+
+  // Scroll-spy: the section crossing the upper band of the viewport owns the tab.
+  useEffect(() => {
+    const els = NAV.map(([id]) => document.getElementById(id)).filter(
+      (el): el is HTMLElement => el !== null,
+    );
+    if (els.length === 0) return;
+    const visible = new Set<string>();
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) visible.add(e.target.id);
+          else visible.delete(e.target.id);
+        }
+        const first = NAV.find(([id]) => visible.has(id));
+        if (first) setActiveSection(first[0]);
+      },
+      { rootMargin: "-15% 0px -70% 0px" },
+    );
+    els.forEach((el) => obs.observe(el));
+    return () => obs.disconnect();
+  }, []);
 
   return (
     <div className="min-h-screen">
@@ -43,7 +66,12 @@ export default function Home() {
             <li key={id}>
               <a
                 href={`#${id}`}
-                className="whitespace-nowrap px-2 py-1 uppercase tracking-wide text-muted transition-colors hover:bg-paper-sink hover:text-ink"
+                aria-current={activeSection === id ? "true" : undefined}
+                className={`whitespace-nowrap border-b-2 px-2 py-1 uppercase tracking-wide transition-colors ${
+                  activeSection === id
+                    ? "border-ink text-ink"
+                    : "border-transparent text-muted hover:bg-paper-sink hover:text-ink"
+                }`}
               >
                 {label}
               </a>

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { pct, rupees } from "@/lib/format";
-import { Field } from "./ui";
+import { Field, StatCell, StatStrip } from "./ui";
 
 interface BatchReport {
   cases_total?: number;
@@ -128,18 +128,18 @@ export function BatchRunner({ onDone }: { onDone: () => void }) {
 
       {report ? (
         <div className="flex flex-col gap-2 fade-up">
-          <div className="grid grid-cols-2 gap-[2px] sm:grid-cols-3 lg:grid-cols-6">
-            <Cell label="cases" value={String(report.cases_total ?? "—")} />
-            <Cell label="recovery rate" value={report.recovery_rate != null ? pct(report.recovery_rate) : "—"} tone="green" />
-            <Cell label="recovered ₹" value={report.total_recovered_paise != null ? rupees(report.total_recovered_paise, { compact: true }) : "—"} />
-            <Cell label="mean TTR" value={report.mean_time_to_recovery_hours != null ? `${report.mean_time_to_recovery_hours}h` : "—"} />
-            <Cell label="false positives" value={report.false_positive_rate != null ? pct(report.false_positive_rate) : "—"} tone="rust" />
-            <Cell
+          <StatStrip cols="grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+            <StatCell label="cases" value={String(report.cases_total ?? "—")} />
+            <StatCell label="recovery rate" value={report.recovery_rate != null ? pct(report.recovery_rate) : "—"} tone="green" />
+            <StatCell label="recovered ₹" value={report.total_recovered_paise != null ? rupees(report.total_recovered_paise, { compact: true }) : "—"} />
+            <StatCell label="mean TTR" value={report.mean_time_to_recovery_hours != null ? `${report.mean_time_to_recovery_hours}h` : "—"} />
+            <StatCell label="false positives" value={report.false_positive_rate != null ? pct(report.false_positive_rate) : "—"} tone="rust" />
+            <StatCell
               label="violations"
               value={String(report.guardrail_violations ?? "—")}
               tone={(report.guardrail_violations ?? 0) === 0 ? "green" : "brick"}
             />
-          </div>
+          </StatStrip>
           {report.settled_cohort ? (
             <p className="font-mono text-[11.5px] leading-snug text-muted">
               settled cohort — {report.settled_cohort.cases} cases with their full{" "}
@@ -153,17 +153,6 @@ export function BatchRunner({ onDone }: { onDone: () => void }) {
           ) : null}
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function Cell({ label, value, tone }: { label: string; value: string; tone?: string }) {
-  const color =
-    tone === "green" ? "text-text-green" : tone === "rust" ? "text-text-rust" : tone === "brick" ? "text-text-brick" : "";
-  return (
-    <div className="border border-hairline bg-paper-raise p-3">
-      <span className="block text-[11px] text-muted">{label}</span>
-      <span className={`mt-0.5 block font-mono text-[19px] font-medium leading-tight ${color}`}>{value}</span>
     </div>
   );
 }

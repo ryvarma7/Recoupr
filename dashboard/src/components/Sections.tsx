@@ -2,7 +2,7 @@
 
 import { ACTION_LABELS, istTime } from "@/lib/format";
 import type { AuditEntry, CaseSummary, GuardrailLogEntry, MetricsSummary } from "@/lib/types";
-import { StateTag } from "./ui";
+import { StateTag, StatCell, StatStrip } from "./ui";
 
 /** 03 — Exceptions queue: everything that needs a human or explains itself. */
 export function Exceptions({
@@ -51,19 +51,19 @@ export function GuardrailSection({
 }) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap gap-[2px]">
-        <GateStat label="checks logged" value={String(checks.length)} />
-        <GateStat label="blocked" value={String(metrics.guardrail_blocks)} tone="rust" />
-        <GateStat
+      <StatStrip cols="grid-cols-1 sm:grid-cols-3">
+        <StatCell label="checks logged" value={String(checks.length)} />
+        <StatCell label="blocked" value={String(metrics.guardrail_blocks)} tone="rust" />
+        <StatCell
           label="violations"
           value={String(metrics.guardrail_violations)}
           tone={metrics.guardrail_violations === 0 ? "green" : "brick"}
         />
-        <p className="w-full pt-1 font-mono text-[11.5px] leading-snug text-muted">
+      </StatStrip>
+      <p className="font-mono text-[11.5px] leading-snug text-muted">
           A violation is an executed action without a passing check — the invariant that must
           stay zero. Blocks are the gate working as designed.
         </p>
-      </div>
 
       <div className="max-h-[420px] overflow-y-auto border border-hairline slim-scroll">
         <table className="w-full border-collapse text-[13px]">
@@ -106,17 +106,6 @@ export function GuardrailSection({
           </tbody>
         </table>
       </div>
-    </div>
-  );
-}
-
-function GateStat({ label, value, tone }: { label: string; value: string; tone?: string }) {
-  const color =
-    tone === "rust" ? "text-text-rust" : tone === "green" ? "text-text-green" : tone === "brick" ? "text-text-brick" : "";
-  return (
-    <div className="flex min-w-[140px] flex-col gap-0.5 border border-hairline bg-paper-raise px-4 py-3">
-      <span className="text-[11.5px] text-muted">{label}</span>
-      <span className={`font-mono text-[22px] font-medium leading-tight ${color}`}>{value}</span>
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import type { MetricsSummary } from "@/lib/types";
 import { hours, pct, rupees } from "@/lib/format";
 import { OutcomeStrip, Sparkline, type StripSegment } from "./charts";
-import { StatTile } from "./ui";
+import { StatCell, StatStrip } from "./ui";
 
 /**
  * 01 — Overview.
@@ -32,30 +32,30 @@ export function Overview({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-1 gap-[2px] sm:grid-cols-2 lg:grid-cols-4">
-        {/* Hero tile spans two rows visually via larger figure; exactly one hero per view. */}
-        <StatTile
+      {/* Hero cell carries the larger figure; exactly one hero per view. */}
+      <StatStrip>
+        <StatCell
           hero
           label="Recovery rate"
           value={pct(cleanRate)}
           sub={`${metrics.recovered} recovered ÷ ${metrics.recovered + metrics.lost} resolved`}
         />
-        <StatTile
+        <StatCell
           label="Money recovered"
           value={rupees(metrics.total_recovered_paise, { compact: true })}
           sub={`mean ${hours(metrics.mean_time_to_recovery_hours)} to recovery`}
         />
-        <StatTile
+        <StatCell
           label="Escalation load"
           value={`${metrics.escalated_pct}%`}
           sub={`${metrics.escalated} cases sent to a human`}
         />
-        <StatTile
+        <StatCell
           label="False-positive rate"
           value={pct(metrics.false_positive_rate)}
           sub="acted-on cases that were unrecoverable"
         />
-      </div>
+      </StatStrip>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         <div className="border border-hairline bg-paper-raise p-4 lg:col-span-3">

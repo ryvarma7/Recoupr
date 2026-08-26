@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { ACTION_LABELS, istTime, rupees } from "@/lib/format";
 import type { CaseDetail } from "@/lib/types";
@@ -23,9 +23,12 @@ export function CaseDrawer({
   const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [arming, setArming] = useState(false); // two-step confirm before the stamp
+  const [stamped, setStamped] = useState(false); // post-approve feedback before close
+  const closeTimer = useRef<number | null>(null);
 
   useEffect(() => {
     setArming(false);
+    setStamped(false);
     let cancelled = false;
     api
       .caseDetail(caseId)
@@ -39,7 +42,10 @@ export function CaseDrawer({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+    };
   }, [onClose]);
 
   const approve = useCallback(async () => {
@@ -48,12 +54,13 @@ export function CaseDrawer({
     try {
       await api.approve(detail.id);
       setArming(false);
-      setDetail(await api.caseDetail(caseId));
-      onChanged();
+      setStamped(true); // ✓ APPROVED reads for a beat before the panel closes
+      onChanged(); // feed row updates behind the panel
+      closeTimer.current = window.setTimeout(onClose, 1200);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [detail, caseId, onChanged]);
+  }, [detail, onChanged, onClose]);
 
   return (
     <aside
@@ -99,9 +106,16 @@ export function CaseDrawer({
       ) : (
         <div className="flex-1 overflow-y-auto slim-scroll">
           {/* Approve & Send stamp */}
-          {detail.can_approve ? (
+          {detail.can_approve || stamped ? (
             <div className="border-b border-hairline bg-paper px-5 py-4">
-              {arming ? (
+              {stamped ? (
+                <div className="flex items-center gap-3 fade-up" role="status">
+                  <span className="border border-text-green bg-mark-green/10 px-2.5 py-1 font-mono text-[12px] uppercase tracking-[0.2em] text-text-green">
+                    ✓ approved
+                  </span>
+                  <span className="font-mono text-[11.5px] text-muted">executing approved action…</span>
+                </div>
+              ) : arming ? (
                 <div className="flex items-center justify-between gap-3 fade-up">
                   <span className="text-[13px]">
                     Execute the proposed action as a{" "}

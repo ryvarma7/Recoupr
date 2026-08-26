@@ -119,34 +119,58 @@ export function LegendDot({ color }: { color: string }) {
   );
 }
 
-/** Stat tile per the stat-tile contract: label / value / optional trend slot. */
-export function StatTile({
+/**
+ * Stat group as one continuous instrument panel: a single outer hairline,
+ * values divided by internal hairlines only (gap-px over the border color).
+ * Every KPI row in the console uses this — never individually bordered boxes.
+ */
+export function StatStrip({
+  children,
+  cols = "grid-cols-2 lg:grid-cols-4",
+}: {
+  children: React.ReactNode;
+  cols?: string;
+}) {
+  return (
+    <div className={`grid gap-px border border-hairline bg-hairline ${cols}`}>{children}</div>
+  );
+}
+
+/** One cell of a StatStrip: label / mono value / optional sub-line. */
+export function StatCell({
   label,
   value,
   sub,
   hero = false,
-  children,
+  tone,
 }: {
   label: string;
   value: React.ReactNode;
   sub?: React.ReactNode;
   hero?: boolean;
-  children?: React.ReactNode;
+  tone?: string;
 }) {
+  const color =
+    tone === "green"
+      ? "text-text-green"
+      : tone === "rust"
+        ? "text-text-rust"
+        : tone === "brick"
+          ? "text-text-brick"
+          : "";
   return (
-    <div className="flex min-w-0 flex-col gap-1.5 border border-hairline bg-paper-raise p-4">
+    <div className="flex min-w-0 flex-col gap-1.5 bg-paper-raise p-4">
       <span className="text-[12px] leading-none text-muted">{label}</span>
       <span
-        className={
+        className={`${color} font-mono font-medium ${
           hero
-            ? "font-mono text-[52px] font-medium leading-none tracking-tight"
-            : "font-mono text-[27px] font-medium leading-tight"
-        }
+            ? "text-[52px] leading-none tracking-tight tabular-nums"
+            : "text-[27px] leading-tight tabular-nums"
+        }`}
       >
         {value}
       </span>
       {sub ? <span className="font-mono text-[11.5px] leading-snug text-muted">{sub}</span> : null}
-      {children}
     </div>
   );
 }
