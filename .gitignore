@@ -1,6 +1,7 @@
 # Planning docs stay local; the final verification handoff is part of the submission.
 docs/*
 !docs/final-verification.md
+!docs/pitch-script.md
 
 # Secrets
 .env
