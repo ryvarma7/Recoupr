@@ -154,6 +154,7 @@ class Case(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     display_ref: str = Field(unique=True)          # e.g. "CS-000042"
     event_id: int = Field(foreign_key="event.id")
+    simulation_run_id: int | None = Field(default=None, foreign_key="simulationrun.id", index=True)
     merchant_id: int = Field(foreign_key="merchant.id")
     flow_type: FlowType
     state: CaseState = CaseState.NEW
@@ -240,12 +241,11 @@ class Outcome(SQLModel, table=True):
     recovered_at: datetime | None = None
     matched_payment_id: str | None = None          # never null when outcome_type == RECOVERED
     detail: str | None = None
+    late_recovery_after_ttl: bool = False
     created_at: datetime = Field(default_factory=_utcnow)
 
 
 class AuditLogEntry(SQLModel, table=True):
-    __table_args__ = (UniqueConstraint("id", name="uq_auditlog_id"),)
-
     id: int | None = Field(default=None, primary_key=True)
     case_id: int = Field(foreign_key="case.id", index=True)
     actor: Actor

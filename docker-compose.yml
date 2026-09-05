@@ -40,7 +40,8 @@ services:
   dashboard:
     image: node:22-alpine
     working_dir: /srv
-    command: sh -c "npm install --no-audit --no-fund && npm run dev"
+    # npm ci never rewrites package-lock.json (npm install churned it every boot).
+    command: sh -c "npm ci --no-audit --no-fund && npm run dev"
     volumes:
       - ./dashboard:/srv
     environment:

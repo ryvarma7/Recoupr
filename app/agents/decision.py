@@ -190,8 +190,13 @@ def decide(
     try:
         out = llm.classify(system=_DECISION_SYSTEM, prompt=prompt, schema=DecisionOutput)
     except (LLMTimedOut, LLMError) as exc:
-        logger.warning("decision LLM unavailable (%s); using template choice", exc)
-        return template_choice
+        logger.warning("decision LLM unavailable (%s); escalating", exc)
+        return DecisionProposal(
+            proposed_action="escalate_human",
+            action_params={"reason": f"decision unavailable ({exc})", "queue": "ops-review"},
+            reasoning="decision model failed; human review required",
+            decided_by="template",
+        )
 
     idx = out.chosen_index
     if idx < 0 or idx >= len(candidates):

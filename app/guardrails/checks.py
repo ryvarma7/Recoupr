@@ -27,6 +27,9 @@ _SENSITIVE_CONTENT_RE = re.compile(
     r"(?i)\b(otp|one[\s-]?time[\s-]?password|pin\b|card[\s-]?number|cvv|cvc)\b"
 )
 
+def has_sensitive_content(body: str) -> bool:
+    return bool(_SENSITIVE_CONTENT_RE.search(body))
+
 
 @dataclass(frozen=True)
 class GateContext:
@@ -89,7 +92,7 @@ def _violations_for_message_action(
         violations.append("order_reference_missing")
 
     body = str(params.get("message_body", ""))
-    if _SENSITIVE_CONTENT_RE.search(body):
+    if has_sensitive_content(body):
         violations.append("sensitive_content_in_message")
 
 

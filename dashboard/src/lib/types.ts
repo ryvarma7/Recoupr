@@ -71,6 +71,7 @@ export interface CaseDetail extends CaseSummary {
     recovered_at: string | null;
     matched_payment_id: string | null;
     detail: string | null;
+    late_recovery_after_ttl: boolean;
   }>;
   can_approve: boolean;
 }
@@ -93,6 +94,9 @@ export interface MetricsSummary {
   guardrail_blocks: number;
   diagnosis_method_split: { rule: number; llm: number; fallback: number };
   computed_at: string;
+  at_risk_paise: number;
+  late_recovery_after_ttl: number;
+  late_recovery_note: string;
 }
 
 export interface GuardrailLogEntry {

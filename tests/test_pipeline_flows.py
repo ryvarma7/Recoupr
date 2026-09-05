@@ -274,7 +274,44 @@ def test_approve_and_send_from_escalated_state(db: Session):
 
     approved = approve_and_send(db, case, now=start + timedelta(hours=18, minutes=45))
     assert approved.state == CaseState.AWAITING_OUTCOME
+    approved_action = db.exec(
+        select(Action).where(Action.case_id == case.id, Action.action_type == "send_payment_link")
+        .order_by(Action.id.desc())
+    ).first()
+    assert approved_action is not None and approved_action.external_ref.startswith("plink_")
+    assert case.attempts_count == 4
+    assert case.last_action_at == (start + timedelta(hours=18, minutes=45)).replace(tzinfo=None)
     human_rows = db.exec(
         select(AuditLogEntry).where(AuditLogEntry.case_id == case.id)  # type: ignore[arg-type]
     ).all()
     assert any(r.actor == Actor.HUMAN for r in human_rows)
+
+
+def test_wrong_amount_payment_is_rejected(db: Session):
+    policy, merchant, customer = _seed(db)
+    event = make_event(error_code="gateway_timeout", occurred_at=NOW)
+    db.add(event)
+    db.flush()
+    case = make_case(db, policy, merchant, customer, event, now=NOW)
+    process_case(db, case, now=NOW)
+    with pytest.raises(ValueError, match="does not exactly match"):
+        record_recovery(db, case, payment_id="pay_wrong", amount=case.amount + 1, recovered_at=NOW)
+    assert case.state == CaseState.AWAITING_OUTCOME
+
+
+def test_final_rendered_message_is_scanned(db: Session, monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "")
+    get_settings.cache_clear()
+    policy, merchant, customer = _seed(db)
+    event = make_event(error_code="gateway_timeout", occurred_at=NOW)
+    db.add(event)
+    db.flush()
+    case = make_case(db, policy, merchant, customer, event, now=NOW)
+    monkeypatch.setattr("app.services.pipeline.render_recovery_message", lambda **_: "Please send your OTP here")
+    process_case(db, case, now=NOW)
+    assert case.state == CaseState.ESCALATED_TO_HUMAN
+    assert any(
+        any("sensitive_content" in rule for rule in (c.violated_rules or []))
+        for c in db.exec(select(GuardrailCheck)).all()
+    )
+    get_settings.cache_clear()

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlmodel import Session, select
 
@@ -23,7 +24,7 @@ from app.agents.diagnosis import (
 from app.agents.state_machine import audit, transition
 from app.core.clock import as_naive_utc
 from app.core.config import get_settings
-from app.guardrails.checks import GateContext, check_guardrails
+from app.guardrails.checks import GateContext, check_guardrails, has_sensitive_content
 from app.guardrails.policy import PolicySnapshot, quiet_hours_resume_utc
 from app.models.entities import (
     Action,
@@ -74,7 +75,9 @@ def ensure_default_merchant(session: Session) -> tuple[Merchant, GuardrailPolicy
     return merchant, policy
 
 
-def create_case_for_event(session: Session, event: Event, *, now: datetime) -> Case:
+def create_case_for_event(
+    session: Session, event: Event, *, now: datetime, simulation_run_id: int | None = None
+) -> Case:
     """Ingest an at-risk event into a new Case, snapshotting the live policy."""
     now = as_naive_utc(now)
     merchant, policy_row = ensure_default_merchant(session)
@@ -83,6 +86,7 @@ def create_case_for_event(session: Session, event: Event, *, now: datetime) -> C
     case = Case(
         display_ref=f"CS-{event.id:06d}",
         event_id=event.id,  # type: ignore[arg-type]
+        simulation_run_id=simulation_run_id,
         merchant_id=merchant.id,  # type: ignore[arg-type]
         flow_type=_flow_for(event),
         amount=event.amount,
@@ -189,6 +193,12 @@ def process_case(
             "language": proposal.message_language or "en",
             "tone": proposal.message_tone or "friendly",
         })
+        # Render the exact message that will be sent; the URL is the only value
+        # not available until a link is created, and cannot affect content safety.
+        params["message_body"] = render_recovery_message(
+            case=case, language=params["language"], tone=params["tone"],
+            short_url="https://rzp.io/i/preview",
+        )
 
     decision = Decision(
         case_id=case.id, proposed_action=action_name, action_params=params,
@@ -284,6 +294,8 @@ def _execute(session: Session, case: Case, decision: Decision, client: PaymentCl
             tone=decision.action_params.get("tone", "friendly"),
             short_url=link["short_url"],
         )
+        if has_sensitive_content(body):
+            raise ExecutionError("sensitive content detected in final rendered message")
         channel = decision.action_params.get("channel", "email")
         session.add(Action(
             case_id=case.id, decision_id=decision.id, action_type="send_payment_link",
@@ -356,6 +368,7 @@ def _escalate(session: Session, case: Case, *, reason: str, now: datetime) -> No
 # ---------------------------------------------------------------------------
 
 def _gate_context(session: Session, case: Case, customer: Customer | None, now: datetime, settings) -> GateContext:
+    merchant = session.get(Merchant, case.merchant_id)
     verified = set()
     if settings.sms_sender_verified:
         verified.add("sms")
@@ -372,7 +385,7 @@ def _gate_context(session: Session, case: Case, customer: Customer | None, now: 
     ).all()
     return GateContext(
         now=now,
-        tz=settings.tz,
+        tz=ZoneInfo(merchant.timezone if merchant else settings.merchant_timezone),
         customer_sms_opt_in=bool(customer and customer.sms_opt_in),
         customer_whatsapp_opt_in=bool(customer and customer.whatsapp_opt_in),
         verified_channels=frozenset(verified),
@@ -424,6 +437,19 @@ def _link_related_cases(session: Session, case: Case) -> None:
 def record_recovery(session: Session, case: Case, *, payment_id: str, amount: int, recovered_at: datetime) -> None:
     """Mark RECOVERED — only ever from a real, matched payment event."""
     recovered_at = as_naive_utc(recovered_at)
+    if amount != case.amount:
+        raise ValueError(f"payment amount {amount} does not exactly match case amount {case.amount}")
+    late = case.state == CaseState.LOST
+    if late:
+        session.add(Outcome(
+            case_id=case.id, outcome_type=OutcomeType.RECOVERED,
+            amount_recovered=amount, recovered_at=recovered_at, matched_payment_id=payment_id,
+            detail="payment arrived after TTL; case remains LOST",
+            late_recovery_after_ttl=True,
+        ))
+        audit(session, case, actor=Actor.SYSTEM,
+              summary=f"late payment {payment_id} matched after TTL; case remains LOST", now=recovered_at)
+        return
     session.add(Outcome(
         case_id=case.id, outcome_type=OutcomeType.RECOVERED,
         amount_recovered=amount, recovered_at=recovered_at, matched_payment_id=payment_id,
@@ -462,6 +488,18 @@ def approve_and_send(session: Session, case: Case, *, now: datetime) -> Case:
     pending.actor = Actor.HUMAN
     pending.executed_at = now
     audit(session, case, actor=Actor.HUMAN, summary="human approved escalated action", now=now)
-    transition(session, case, CaseState.AWAITING_OUTCOME, actor=Actor.HUMAN,
-               summary="approved by human; automation observes outcome", now=now)
+    client = get_payment_client()
+    if case.flow_type == FlowType.SUBSCRIPTION_MANDATE:
+        decision = Decision(case_id=case.id, proposed_action="retry_mandate_charge",
+                            action_params={}, reasoning="human-approved escalated recovery")
+    else:
+        decision = Decision(case_id=case.id, proposed_action="send_payment_link", action_params={
+            "amount": case.amount, "order_ref": case.order_id or case.subscription_id or case.display_ref,
+            "expire_hours": PolicySnapshot(case.policy_snapshot).payment_link_expiry_hours,
+            "single_use": PolicySnapshot(case.policy_snapshot).payment_link_single_use,
+            "hosted_domain": "rzp.io", "channel": "email", "language": "en", "tone": "friendly",
+        }, reasoning="human-approved escalated recovery", status=DecisionStatus.APPROVED)
+    session.add(decision)
+    session.flush()
+    _execute(session, case, decision, client, now=now)
     return case

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { MetricsSummary } from "@/lib/types";
 import { hours, pct, rupees } from "@/lib/format";
 import { OutcomeStrip, Sparkline, type StripSegment } from "./charts";
@@ -16,11 +16,15 @@ export function Overview({
   cases,
 }: {
   metrics: MetricsSummary;
-  cases: Array<Pick<import("@/lib/types").CaseSummary, "created_at">>;
+  cases: Array<Pick<import("@/lib/types").CaseSummary, "created_at" | "amount_paise" | "state">>;
 }) {
   // Last 12 UTC days of case creation, derived client-side from the feed.
   const days = useMemoDays(cases);
   const cleanRate = metrics.recovery_rate;
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const filteredAtRisk = cases.filter((c) => (!from || c.created_at >= from) && (!to || c.created_at < `${to}T23:59:59`))
+    .reduce((sum, c) => sum + (c.state === "RECOVERED" ? 0 : c.amount_paise), 0);
 
   const segments: StripSegment[] = [
     { key: "recovered", label: "recovered", color: "#177a53", textColor: "green", value: metrics.recovered },
@@ -40,6 +44,7 @@ export function Overview({
           value={pct(cleanRate)}
           sub={`${metrics.recovered} recovered ÷ ${metrics.recovered + metrics.lost} resolved`}
         />
+        <StatCell label="₹ at risk detected" value={rupees(from || to ? filteredAtRisk : metrics.at_risk_paise, { compact: true })} sub="unrecovered case value" />
         <StatCell
           label="Money recovered"
           value={rupees(metrics.total_recovered_paise, { compact: true })}
@@ -56,6 +61,13 @@ export function Overview({
           sub="acted-on cases that were unrecoverable"
         />
       </StatStrip>
+
+      <div className="flex flex-wrap items-center gap-2 font-mono text-[11.5px] text-muted">
+        <span>date range</span>
+        <input aria-label="from date" type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="border border-hairline bg-paper px-2 py-1" />
+        <span>to</span>
+        <input aria-label="to date" type="date" value={to} onChange={(e) => setTo(e.target.value)} className="border border-hairline bg-paper px-2 py-1" />
+      </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         <div className="border border-hairline bg-paper-raise p-4 lg:col-span-3">
@@ -104,6 +116,9 @@ export function Overview({
           ]}
         />
       </div>
+      {metrics.late_recovery_after_ttl > 0 ? (
+        <p className="font-mono text-[11.5px] text-text-rust">{metrics.late_recovery_note}</p>
+      ) : null}
     </div>
   );
 }

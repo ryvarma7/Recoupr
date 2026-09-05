@@ -32,8 +32,11 @@ from app.models.entities import (
 OPEN_STATES = {CaseState.NEW, CaseState.PROCESSING, CaseState.AWAITING_OUTCOME}
 
 
-def compute_summary(session: Session, *, now: datetime | None = None) -> dict:
+def compute_summary(session: Session, *, now: datetime | None = None, simulation_run_id: int | None = None) -> dict:
     cases = session.exec(select(Case)).all()
+    if simulation_run_id is not None:
+        cases = [c for c in cases if c.simulation_run_id == simulation_run_id]
+    case_ids = {c.id for c in cases}
     now = now or datetime.now().astimezone()
 
     def count(state_set: set[CaseState]) -> int:
@@ -45,8 +48,8 @@ def compute_summary(session: Session, *, now: datetime | None = None) -> dict:
     stopped = [c for c in cases if c.state == CaseState.STOPPED_UNRECOVERABLE]
     pending = [c for c in cases if c.state in OPEN_STATES]
 
-    outcomes = session.exec(select(Outcome)).all()
-    total_recovered_paise = sum(o.amount_recovered for o in outcomes)
+    outcomes = [o for o in session.exec(select(Outcome)).all() if o.case_id in case_ids]
+    total_recovered_paise = sum(o.amount_recovered for o in outcomes if not o.late_recovery_after_ttl)
 
     denominator = len(recovered) + len(lost)
     recovery_rate = (len(recovered) / denominator) if denominator else 0.0
@@ -55,6 +58,7 @@ def compute_summary(session: Session, *, now: datetime | None = None) -> dict:
         (o.recovered_at - c.created_at).total_seconds() / 3600.0
         for o in outcomes
         if o.outcome_type == OutcomeType.RECOVERED and o.recovered_at is not None
+        and not o.late_recovery_after_ttl
         for c in cases
         if c.id == o.case_id
     ]
@@ -69,9 +73,9 @@ def compute_summary(session: Session, *, now: datetime | None = None) -> dict:
     # acted-on when the agent actually reached toward the customer — messaging or
     # charging. Escalations (no customer contact) and stops (deliberate decline)
     # are excluded: declining to act can't be a false positive.
-    events = {e.id: e for e in session.exec(select(Event)).all()}
+    events = {e.id: e for e in session.exec(select(Event)).all() if e.id in {c.event_id for c in cases}}
     acted_case_ids = {
-        a.case_id for a in session.exec(select(Action)).all()
+        a.case_id for a in session.exec(select(Action)).all() if a.case_id in case_ids
         if a.action_type in ("send_payment_link", "retry_mandate_charge")
     }
     labeled_acted = [
@@ -84,9 +88,9 @@ def compute_summary(session: Session, *, now: datetime | None = None) -> dict:
         fps = sum(1 for e in labeled_acted if not e.ground_truth_recoverable)
         fp_rate = fps / len(labeled_acted)
 
-    checks = session.exec(select(GuardrailCheck)).all()
-    decisions = {d.id: d for d in session.exec(select(Decision)).all()}
-    diagnoses = session.exec(select(Diagnosis)).all()
+    checks = [c for c in session.exec(select(GuardrailCheck)).all() if c.case_id in case_ids]
+    decisions = {d.id: d for d in session.exec(select(Decision)).all() if d.case_id in case_ids}
+    diagnoses = [d for d in session.exec(select(Diagnosis)).all() if d.case_id in case_ids]
 
     real_violations = 0
     for check in checks:
@@ -115,6 +119,12 @@ def compute_summary(session: Session, *, now: datetime | None = None) -> dict:
         "false_positive_rate": round(fp_rate, 4),
         "guardrail_violations": real_violations,          # must be zero on a clean batch
         "guardrail_blocks": sum(1 for c in checks if not c.passed),  # the gate doing its job
+        "at_risk_paise": sum(c.amount for c in cases if c.state != CaseState.RECOVERED),
+        "late_recovery_after_ttl": sum(1 for o in outcomes if o.late_recovery_after_ttl),
+        "late_recovery_note": (
+            f"{sum(1 for o in outcomes if o.late_recovery_after_ttl)} cases paid after being marked lost "
+            "— not counted in recovery rate."
+        ),
         "diagnosis_method_split": {
             "rule": sum(1 for d in diagnoses if d.method == "rule"),
             "llm": sum(1 for d in diagnoses if d.method == "llm"),

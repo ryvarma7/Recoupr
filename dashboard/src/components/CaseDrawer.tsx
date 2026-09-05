@@ -259,7 +259,7 @@ function Chain({ detail }: { detail: CaseDetail }) {
         {detail.outcomes.map((o, i) => (
           <div key={`o${i}`} className="mt-2 border-l-2 border-mark-green pl-3">
             <span className="font-mono text-[12.5px] text-text-green">
-              recovered {o.amount_recovered_paise != null ? rupees(o.amount_recovered_paise) : ""}
+              {o.late_recovery_after_ttl ? "late payment after case was marked lost" : `recovered ${o.amount_recovered_paise != null ? rupees(o.amount_recovered_paise) : ""}`}
             </span>
             <p className="font-mono text-[11px] text-muted">
               matched {o.matched_payment_id} · {istTime(o.recovered_at)} IST

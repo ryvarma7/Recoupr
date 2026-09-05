@@ -121,7 +121,7 @@ def run_batch(
     cases: list[tuple[Case, SyntheticFailure]] = []
     for i, failure in enumerate(failures):
         event = _ingest(session, failure)
-        case = create_case_for_event(session, event, now=failure.occurred_at)
+        case = create_case_for_event(session, event, now=failure.occurred_at, simulation_run_id=run_row.id)
         process_case(session, case, now=failure.occurred_at)
         cases.append((case, failure))
         if i % 25 == 0:
@@ -219,7 +219,7 @@ def run_batch(
             mark_lost(session, case, now=case.case_deadline_at)
         session.commit()
 
-    summary = compute_summary(session, now=datetime.now().astimezone())
+    summary = compute_summary(session, now=datetime.now().astimezone(), simulation_run_id=run_row.id)
 
     # Settled cohort — cases whose full observation window (TTL) has elapsed, so
     # every one of them has had its complete chance to recover or be lost. The

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlmodel import Session, select
@@ -18,6 +20,7 @@ from app.models.entities import (
     GuardrailCheck,
     GuardrailPolicy,
     Outcome,
+    SimulationRun,
 )
 from app.services.maintenance import run_maintenance
 from app.services.metrics import compute_summary
@@ -64,10 +67,17 @@ def list_cases(
     flow: str | None = Query(default=None),
     limit: int = Query(default=100, le=500),
     offset: int = Query(default=0),
+    start: datetime | None = Query(default=None),
+    end: datetime | None = Query(default=None),
+    simulation_run_id: int | None = Query(default=None),
     session: Session = Depends(get_session),
 ) -> dict:
     statement = select(Case).order_by(Case.updated_at.desc())  # type: ignore[union-attr]
     cases = session.exec(statement).all()
+    if simulation_run_id is None:
+        latest_run = session.exec(select(SimulationRun).order_by(SimulationRun.id.desc())).first()
+        if latest_run is not None:
+            simulation_run_id = latest_run.id
     if state:
         target = _STATE_ALIASES.get(state.upper())
         if target is None:
@@ -75,6 +85,12 @@ def list_cases(
         cases = [c for c in cases if c.state == target]
     if flow:
         cases = [c for c in cases if c.flow_type.value == flow.upper()]
+    if start:
+        cases = [c for c in cases if c.created_at >= start]
+    if end:
+        cases = [c for c in cases if c.created_at < end]
+    if simulation_run_id is not None:
+        cases = [c for c in cases if c.simulation_run_id == simulation_run_id]
 
     return {
         "total": len(cases),
@@ -151,6 +167,7 @@ def case_detail(case_id: int, session: Session = Depends(get_session)) -> dict:
                 "recovered_at": o.recovered_at.isoformat() if o.recovered_at else None,
                 "matched_payment_id": o.matched_payment_id,
                 "detail": o.detail,
+                "late_recovery_after_ttl": o.late_recovery_after_ttl,
             }
             for o in outcomes
         ],
@@ -177,7 +194,8 @@ def approve_case(case_id: int, body: ApproveRequest | None = None, session: Sess
 
 @router.get("/metrics/summary")
 def metrics_summary(session: Session = Depends(get_session)) -> dict:
-    return compute_summary(session)
+    run = session.exec(select(SimulationRun).order_by(SimulationRun.id.desc())).first()
+    return compute_summary(session, simulation_run_id=run.id if run else None)
 
 
 @router.get("/exceptions")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +14,7 @@ from app.api.webhooks import router as webhook_router
 from app.core.clock import utcnow
 from app.core.config import get_settings, subsystem_modes
 from app.db.session import get_session, install_append_only_guards, make_engine
+from app.payments.client import _assert_test_mode
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,7 +22,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger("recoupr")
 
-app = FastAPI(title="Recoupr", version="0.1.0", description="AI revenue-recovery agent system (test mode only)")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    settings = get_settings()
+    _assert_test_mode(settings.razorpay_key_id)
+    startup()
+    yield
+
+app = FastAPI(
+    title="Recoupr", version="0.1.0",
+    description="AI revenue-recovery agent system (test mode only)", lifespan=lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -37,7 +49,6 @@ app.include_router(webhook_router)
 app.include_router(api_router)
 
 
-@app.on_event("startup")
 def startup() -> None:
     settings = get_settings()
     engine = make_engine(settings.database_url)

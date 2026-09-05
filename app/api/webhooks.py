@@ -17,11 +17,12 @@ import logging
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlmodel import Session, select
+from starlette.concurrency import run_in_threadpool
 
 from app.core.clock import utcnow
 from app.core.config import get_settings
 from app.db.session import get_session
-from app.models.entities import Event, EventType
+from app.models.entities import CaseState, Event, EventType
 from app.services.pipeline import create_case_for_event, process_case, record_recovery
 
 logger = logging.getLogger(__name__)
@@ -78,6 +79,14 @@ async def receive_razorpay_webhook(
 
     entity = payload.get("payload", {})
 
+    def _payment_entity(value):
+        if not isinstance(value, dict):
+            return {}
+        payment = value.get("payment")
+        if isinstance(payment, dict) and isinstance(payment.get("entity"), dict):
+            return payment["entity"]
+        return payment if isinstance(payment, dict) else value.get("order", value)
+
     # ── idempotency: duplicate deliveries must never double-act ───────────
     existing = session.exec(select(Event).where(Event.source_event_id == source_id)).first()
     if existing is not None:
@@ -88,7 +97,9 @@ async def receive_razorpay_webhook(
 
     if event_name in FAILURE_EVENTS:
         error = entity.get("error", {}) if isinstance(entity, dict) else {}
-        payment = entity.get("payment", entity.get("order", {})) if isinstance(entity, dict) else {}
+        payment = _payment_entity(entity)
+        if not error and isinstance(payment, dict):
+            error = payment.get("error", {})
         event = Event(
             source_event_id=source_id,
             type=FAILURE_EVENTS[event_name],
@@ -105,12 +116,14 @@ async def receive_razorpay_webhook(
         session.add(event)
         session.flush()
         case = create_case_for_event(session, event, now=now)
-        process_case(session, case, now=now)
+        # LLM retries use exponential backoff; keep that synchronous work off
+        # the event loop so one webhook cannot freeze other deliveries.
+        await run_in_threadpool(process_case, session, case, now=now)
         session.commit()
         return {"status": "accepted", "case_ref": case.display_ref, "state": case.state.value}
 
     if event_name in SUCCESS_EVENTS:
-        payment = entity.get("payment", {}) if isinstance(entity, dict) else {}
+        payment = _payment_entity(entity)
         payment_id = str(payment.get("id") or source_id)
         amount = int(payment.get("amount") or 0)
         reference = (
@@ -123,9 +136,15 @@ async def receive_razorpay_webhook(
             logger.info("success event %s matched no open case (reference=%r)", payment_id, reference)
             return {"status": "ignored", "reason": "no matching open case"}
 
-        record_recovery(session, matched, payment_id=payment_id, amount=amount, recovered_at=now)
+        try:
+            record_recovery(session, matched, payment_id=payment_id, amount=amount, recovered_at=now)
+        except ValueError as exc:
+            session.rollback()
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         session.commit()
-        return {"status": "recovered", "case_ref": matched.display_ref, "matched_payment_id": payment_id}
+        late = matched.state == CaseState.LOST
+        return {"status": "late_recovery_after_ttl" if late else "recovered",
+                "case_ref": matched.display_ref, "matched_payment_id": payment_id}
 
     return {"status": "ignored", "reason": f"unhandled event type {event_name}"}
 
@@ -137,12 +156,12 @@ def _match_open_case(session: Session, reference: str, order_id: str | None):
     if reference.startswith("case:"):
         case_id = int(reference.split(":", 1)[1])
         case = session.get(Case, case_id)
-        if case is not None and case.state == CaseState.AWAITING_OUTCOME:
+        if case is not None and case.state in (CaseState.AWAITING_OUTCOME, CaseState.LOST):
             return case
 
     if order_id:
         candidates = session.exec(
-            select(Case).where(Case.order_id == order_id, Case.state == CaseState.AWAITING_OUTCOME)
+            select(Case).where(Case.order_id == order_id, Case.state.in_((CaseState.AWAITING_OUTCOME, CaseState.LOST)))
         ).all()
         if candidates:
             return candidates[0]

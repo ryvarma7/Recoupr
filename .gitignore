@@ -1,5 +1,6 @@
-# Planning docs — local reference only, never committed
-docs/
+# Planning docs stay local; the final verification handoff is part of the submission.
+docs/*
+!docs/final-verification.md
 
 # Secrets
 .env
