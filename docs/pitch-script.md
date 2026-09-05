@@ -1,86 +1,124 @@
-# Recoupr — five-minute pitch and demo script
+# Recoupr — five-minute pitch and live demo script
 
-This script is written for the verified seed-42 dashboard state. Keep the dashboard open at `http://localhost:3100`. The final run is already loaded, so the timed demo shows the completed batch instead of starting a second run during recording.
+This script follows the actual console shown in the screenshots and the final verified seed-42 run. It is written for a live recording at `http://localhost:3100`. Keep one browser tab open and do not press **Run batch** during the recording; the final batch is already loaded.
 
-## 0:00–0:25 — Problem and product
+The verified final run is: 200 cases, ₹283,397 at risk, ₹196,854 recovered, 70.16% global recovery, 54.32% settled-cohort recovery, and 0 guardrail violations. If the screen is showing an older 150-case snapshot, refresh the page before recording and use the final 200-case state.
 
-**SCREEN ACTION**
-Open the dashboard at `http://localhost:3100`. Stay on **01 overview**.
-
-**WHAT I SAY**
-“Revenue leakage is often a failed payment that nobody follows up on. A dashboard can tell a merchant that money is at risk, but it usually stops there. Recoupr turns that alert into a controlled recovery workflow: detect the event, diagnose it, choose an intervention, execute only if policy allows it, and measure the result.”
-
-## 0:25–1:00 — Overview and measured outcome
+## 0:00–0:30 — Problem and opening
 
 **SCREEN ACTION**
-Point to **₹ at risk detected**, **Recovery rate**, **Money recovered**, and **Escalation load**. Then point to the outcome strip and diagnosis/channel tiles.
+
+Open the console and leave it on **01 OVERVIEW**. Point to the Recoupr name, the `razorpay · test mode` badge, and the live status indicator.
 
 **WHAT I SAY**
-“This final run contains 200 cases. ₹283,397 is still at risk, and ₹196,854 was recovered. The global recovery rate is 70.16 percent: recovered divided by recovered plus lost. Open, escalated, and stopped cases stay out of that denominator. The more honest settled cohort is 54.32 percent, because those cases have completed their full observation window. The dashboard also shows a 10 percent escalation load, a 49.7 percent synthetic false-positive rate, and how recoveries split between payment links and mandate retries.”
 
-## 1:00–1:35 — Case Feed and filters
+“Revenue leakage is usually not one dramatic event. It is a failed payment, an abandoned checkout, a revoked mandate, or an invoice that quietly becomes overdue. A normal dashboard can show that money is at risk, but it does not decide what to do next. Recoupr is a bounded recovery console: it detects the event, diagnoses the reason, chooses an appropriate intervention, checks that intervention against policy, executes it when allowed, and measures the outcome. The goal is not to send more messages. The goal is to recover more money safely.”
+
+## 0:30–1:15 — Overview: measured money, not just alerts
 
 **SCREEN ACTION**
-Click **02 cases**. Show the state chips and flow chips. Click **escalated**, then click **CS-000001**. If needed, use the browser find function for `CS-000001` within the case table.
+
+Point across the five Overview cards: **Recovery rate**, **₹ at risk detected**, **Money recovered**, **Escalation load**, and **False-positive rate**. Then point to the date-range inputs, the 12-day intake chart, outcome distribution, diagnosis engine, resolution channel, and gate activity cards.
 
 **WHAT I SAY**
-“The Case Feed is the working queue. The state filters answer ‘what needs attention now?’ and the A, B, and C filters answer ‘which recovery flow is involved?’ A row opens the full case drawer. This case is a deliberate safe failure: its mandate was revoked, so Recoupr escalates instead of inventing a renewal link or retrying an authorization that no longer exists.”
 
-## 1:35–2:15 — Drawer, AI judgment, and bounded action
+“The headline result is measured across a reproducible batch. ‘₹ at risk detected’ is unresolved case value, and ‘Money recovered’ is successful recovery value. Recovery rate is recovered divided by recovered plus lost; open work is deliberately excluded. In the final 200-case run, the global rate is 70.16 percent, while the settled cohort is 54.32 percent because its full observation window has elapsed. That keeps recent open cases from flattering the result.
+
+“Escalation load shows human work, false-positive rate shows actions later labelled unrecoverable, and the date range limits the view. The outcome strip separates recovered, open, escalated, stopped, and lost. The lower tiles show rules versus LLM, payment link versus mandate retry, and gate blocks versus violations.”
+
+## 1:15–1:55 — Case Feed and filters
 
 **SCREEN ACTION**
-Close the drawer. Filter back to **all**, then open **CS-000030**. Scroll the drawer through **Diagnosis**, **Decision**, **Guardrail gate**, and **Actions & outcomes**.
+
+Click **02 CASES**. Show the state buttons **all**, **open**, **recovered**, **lost**, **escalated**, and **stopped**. Then show **flows**, **flow A**, **flow B**, and **flow C**. Click **escalated** and open `CS-000001` from the verified seed-42 run.
 
 **WHAT I SAY**
-“Here is the AI path. This case has an unfamiliar failure, so the deterministic rule table could not classify it. Groq, using `openai/gpt-oss-20b`, returned a structured diagnosis recorded as `method=llm`, here as `technical_drop`. The model receives the event, amount, error details, flow, attempt number, and a fixed candidate list. It can choose among bounded options, but it cannot execute, change the amount, or bypass policy. Known codes, state transitions, amounts, quiet hours, consent, and the guardrail gate do not need AI.”
 
-## 2:15–2:55 — Batch Simulator
+“The Case Feed is the operational queue. State filters answer what needs attention: open work, recovered outcomes, losses, escalations, or deliberate stops. Flow filters separate the three supported recovery patterns. Every row exposes the case reference, flow, state, amount, attempts, messages, and last update. Clicking a row opens the reasoning chain instead of forcing the operator to guess from a status label.
+
+“This case is the deliberate failure I want to show. The mandate was revoked. Recoupr does not pretend it can repair that authorization, and it does not invent a renewal flow that is outside the product. It escalates or stops honestly, with the reason visible.”
+
+## 1:55–2:45 — Drawer: diagnosis, decision, gate, and outcome
 
 **SCREEN ACTION**
-Click **06 batch**. Show the fields **events**, **seed**, **run batch**, the completed log, and the six result cells. Point to the settled-cohort note.
+
+In the drawer, scroll through **Diagnosis**, **Decision**, **Guardrail gate**, **Actions & outcomes**, **Terminal state**, and **Audit trail — append only**. Close it, return to **all**, and open `CS-000030`.
 
 **WHAT I SAY**
-“The batch simulator is the measured-money proof. Events controls the replay size, from 10 to 300; seed makes the result repeatable; Run batch sends synthetic A, B, and C events through the same diagnosis, decision, gate, execution, and outcome code. The report shows case count, recovery rate, recovered rupees, mean time to recovery, false positives, and violations. This run produced 87 recovered, 37 lost, 20 escalated, 13 stopped, 43 pending, and zero guardrail violations.”
 
-## 2:55–3:35 — Compliance and stopping rules
+“The drawer is the complete case story. Diagnosis records root cause, confidence, method, and reasoning. Decision records the action, language, tone, and parameters. The gate shows whether it passed. Actions and outcomes show external references and recovered value, while terminal state explains how the case ended.
+
+“This second case demonstrates AI judgment. Its error is not in the known rule table, so it reaches Groq with `openai/gpt-oss-20b`. The diagnosis is recorded as `method=llm`, here `technical_drop`. The model receives payment context and a fixed candidate list. It recommends; it cannot move money, change the amount, or bypass policy. Known codes, amounts, quiet hours, consent, retries, and message safety stay deterministic because they must be predictable and auditable.”
+
+## 2:45–3:25 — Batch Simulator: the business result
 
 **SCREEN ACTION**
-Click **04 guardrail**. Point to **checks logged**, **blocked**, **violations**, and a blocked-rule row.
+
+Click **06 BATCH**. Point to **events**, **seed**, and **RUN BATCH**, then to the completed report cards and the settled-cohort note.
 
 **WHAT I SAY**
-“The gate is intentionally deterministic. It checks that the flow owns the action, the amount is unchanged, retry and message caps are respected, the case is inside its TTL, the merchant’s local quiet hours allow contact, consent and sender identity exist, the link is trusted and single-use, and the final rendered message contains no credential request. Timing problems defer. Other violations escalate. A block is the gate working; a violation would mean an executed action bypassed a passing check. The target is zero, and this run has zero.”
 
-## 3:35–4:10 — Audit and human approval
+“The Batch Simulator proves this is more than a single happy-path demo. Events controls replay size, between 10 and 300. Seed makes it repeatable. Run Batch sends synthetic events through diagnosis, decision, guardrail, execution, and outcome. The report shows case count, recovery rate, recovered rupees, mean time to recovery, false positives, and violations.
+
+“For this submission run, the exact request was 200 events with seed 42. It produced ₹196,854 recovered from ₹283,397 still at risk, with zero guardrail violations. That is the track’s core bar: measurable recovery across a batch, not just identification of a problem.”
+
+## 3:25–4:05 — Guardrails and policy
 
 **SCREEN ACTION**
-Click **05 audit** and scroll a few entries. Then return to **03 exceptions** and open an escalated card with **Approve & Send** visible, without confirming it unless you want to demonstrate the action.
+
+Click **04 GUARDRAIL**. Show **checks logged**, **blocked**, and **violations**, then one table row with a proposal and **PASS**. Scroll to the Audit stream below. If time allows, show **07 POLICY** and point to max retries, message cap, quiet hours, allowed channels, cooldown, amount immutability, TTL, link expiry, and single-use links.
 
 **WHAT I SAY**
-“The audit stream records the state transition, diagnosis, proposal, gate verdict, action, actor, timestamp, and outcome. For an escalated case, Approve & Send is the human boundary. Approval creates the bounded action and records its external reference, attempt count, cooldown, and human actor. Recovery is not stamped because a link was created; it requires a matching payment event with the exact case amount.”
 
-## 4:10–4:40 — What broke at 2 AM
+“The guardrail gate is intentionally not an LLM. It checks action ownership, exact amount immutability, retry and message caps, case TTL, merchant-local quiet hours, consent, trusted domains, single-use links, and the final rendered message. A block is safe rejection; a violation would mean an action bypassed a passing check. The target is zero, and the final run has zero.
+
+“Policy is a snapshot because each case keeps the rules it was created under. Here the limits are three retries, two messages in seven days, a six-hour cooldown, a fourteen-day TTL, quiet hours, and immutable amount matching.”
+
+## 4:05–4:35 — Human approval and audit trail
 
 **SCREEN ACTION**
-Keep the audit stream visible, or show the case drawer’s action section.
+
+Click **03 EXCEPTIONS** and open an escalated card so **APPROVE & SEND** is visible. Then click **05 AUDIT** and show several timestamped entries.
 
 **WHAT I SAY**
-“The most important development failure was in approval. The first version of `approve_and_send()` only flipped the state. A database trace showed no external reference and no consumed attempt. We followed the path into the execution layer and fixed approval to create and execute the bounded payment action. We found a second related gap: the content scan checked action parameters before the message existed. We moved rendering before the gate and added a final scan before send. Both paths now have regression tests.”
 
-## 4:40–5:00 — Close
+“Exceptions are the explicit human boundary. An escalated case can be reviewed and approved; approval creates the bounded action, records its reference, increments attempts, and applies cooldown. A payment counts as recovered only when its reference and exact amount match. The Audit stream records what happened, when, why, whether the gate passed, and the outcome.”
+
+## 4:35–4:55 — What broke at 2 AM
 
 **SCREEN ACTION**
-Return to **01 overview** and leave the metrics visible.
+
+Leave the Audit stream or the approval drawer visible.
 
 **WHAT I SAY**
-“This is why Recoupr uses AI selectively. AI handles ambiguity, deterministic policy controls money movement, and humans handle exceptions. The result is not just a list of failed payments: it is measured recovery, compliant stopping, and an audit trail that explains every decision. That is Recoupr for Track 03 — AI Revenue Recovery.”
+
+“The strongest documented late-night failure was the approval path. The first version of `approve_and_send()` only changed the state; it did not execute the payment action. We found that by tracing the database result: there was no external reference and no consumed attempt. We followed the call into execution, fixed approval to create and execute the bounded action, and added a regression test. We also found that the unsafe-content scan was checking action parameters before the final message existed. We moved rendering before the gate and scan the actual message immediately before send. That changed the design: AI can propose, but only the final rendered artifact can pass the deterministic gate.”
+
+## 4:55–5:00 — Close
+
+**SCREEN ACTION**
+
+Return to **01 OVERVIEW** and leave the measured result visible.
+
+**WHAT I SAY**
+
+“Recoupr uses AI where ambiguity exists, deterministic rules where safety matters, and a human where the action is outside the boundary. It turns revenue risk into measured recovery with stopping rules and an audit trail. That is Recoupr for Track 03 — AI Revenue Recovery.”
 
 ## Recording runbook
 
 1. Start the verified stack and open `http://localhost:3100`.
-2. Overview: show ₹ at risk, recovered money, global rate, settled rate, and zero violations.
-3. Cases: filter `escalated`, open `CS-000001`, show revoked-mandate escalation.
-4. Cases: open `CS-000030`, show `method=llm` and the technical-drop diagnosis.
-5. Batch: show events `200`, seed `42`, completed report, settled cohort, and result cells.
-6. Guardrail: show checks, blocked proposals, zero violations, and a rule row.
-7. Audit: show timestamped diagnosis → decision → gate → action history.
-8. Return to Overview and close on the measured result.
+2. **Overview:** show ₹ at risk, recovered money, global rate, settled-cohort explanation, and zero violations.
+3. **Cases:** select **escalated**, open `CS-000001`, and show the revoked-mandate failure.
+4. **Cases:** select **all**, open `CS-000030`, and show the real `method=llm` diagnosis.
+5. **Batch:** show events `200`, seed `42`, the completed report, and the settled-cohort note. Do not click Run Batch.
+6. **Guardrail:** show checks logged, blocked proposals, zero violations, and one PASS row.
+7. **Policy:** quickly show retry/message/quiet-hour/amount rules if the recording is ahead of time.
+8. **Exceptions:** open an escalated card and show **Approve & Send** as the human boundary.
+9. **Audit:** show the timestamped diagnosis → decision → gate → action history.
+10. Return to **Overview** and close on the measured recovery result.
+
+## Verified recording facts
+
+- Deliberate failure: `CS-000001`, escalated because the mandate was revoked; it does not claim a recovered payment.
+- Real Groq diagnosis: `CS-000030`, Diagnosis id `30`, category `technical_drop`, `method=llm`.
+- Final batch: 200 cases, seed 42, ₹283,397 at risk, ₹196,854 recovered, 70.16% global recovery, 54.32% settled-cohort recovery, 0 guardrail violations.
